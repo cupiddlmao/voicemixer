@@ -13,6 +13,17 @@ affiliated with or endorsed by VB-Audio and does not contain their source code
 or proprietary DSP. Original project code is licensed under GPL-3.0-or-later;
 vendored components retain their own licenses and notices (see [vendor](vendor/README.md)).
 
+## Screenshots
+
+Actual application windows captured with a clean profile, before selecting audio
+devices. The recorder example uses a generic recording folder.
+
+![Voicemixer main mixing console](docs/screenshots/console.png)
+
+| Tape recorder options | Reverb and per-bus returns |
+| --- | --- |
+| ![Tape recorder options](docs/screenshots/recorder-options.png) | ![Reverb options](docs/screenshots/reverb-options.png) |
+
 A native C++/Qt personal audio console using the supplied VoiceMeeter Potato
 screenshot as its layout reference. Opens maximized as a normal desktop window.
 This is an independent implementation; the color mapping and DSP are our own

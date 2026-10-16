@@ -8,7 +8,7 @@ import subprocess
 import tarfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.3.0'
+VERSION='0.3.1'
 parser=argparse.ArgumentParser()
 parser.add_argument('--source-only',action='store_true')
 args=parser.parse_args()
