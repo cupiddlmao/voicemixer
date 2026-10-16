@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Linux Mixer
+Comment=Personal audio mixing console
+Exec=linux-mixer
+Icon=linux-mixer
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+StartupWMClass=linux-mixer

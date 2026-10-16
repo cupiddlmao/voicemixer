@@ -1,0 +1,148 @@
+LINUX MIXER 0.3 — ARCH LINUX SETUP
+
+For a current Arch Linux x86_64 desktop with PipeWire/WirePlumber.
+Internet access and an account with sudo access are needed for dependencies.
+The Arch package recipe has not yet been tested on an Arch machine. The mixer
+and audio checks were tested on Ubuntu. This is a local source build, not a
+one-click prebuilt Arch installer.
+
+1. EXTRACT THE ZIP
+
+Extract the entire ZIP into a new folder using your file manager. Keep PKGBUILD
+and linux-mixer-0.3.0-source.tar.gz together. You do not need to extract that
+inner source archive yourself. Open a terminal in the folder containing PKGBUILD
+(often right-click the folder background -> Open Terminal Here).
+
+2. INSTALL BUILD TOOLS
+
+Run:
+  sudo pacman -Syu --needed base-devel
+
+This performs a normal full system update and installs Arch's build tools.
+Read pacman's prompts before accepting. If an update requires a reboot, reboot
+before continuing, then open the terminal in the extracted folder again.
+
+3. BUILD AND INSTALL
+
+As your normal user, run:
+  makepkg -si
+
+Do NOT run makepkg with sudo. It asks for sudo when installing dependencies and
+the completed package. It builds the included source, checks the DSP, then asks
+to install linux-mixer. Keep this terminal open until it finishes. The source
+archive checksum is checked automatically. Compilation itself uses the included
+RNNoise source; dependencies are downloaded through pacman.
+
+The recipe requests Qt 6, PipeWire audio and PulseAudio compatibility,
+WirePlumber, FFmpeg, Zam LADSPA plugins, CMake, Ninja and GCC. If pacman proposes
+replacing a different sound-server stack, review that change first: switching
+audio servers affects the whole desktop. Log out and back in after changing
+sound servers. Do not enable a second session manager alongside WirePlumber.
+
+4. OPEN THE MIXER
+
+Find Linux Mixer in your application launcher, or run:
+  linux-mixer
+
+Use your normal desktop account, never sudo. Choose your microphone under
+HARDWARE INPUT 1. Choose headphones/speakers under HARDWARE OUT A1. Use the
+engine button or Menu's start action if the engine is off. Choose your own
+devices: the sender's microphone names, routes and settings are not included.
+Additional hardware strips can each select their own microphone/interface
+channel. Leave unused strips unassigned.
+
+5. ROUTE MICROPHONE AND DISCORD
+
+In the microphone strip:
+  B1 ON sends your processed voice to Linux Mixer Microphone.
+  A1 OFF prevents hearing your own voice in your headphones.
+
+In Discord -> Voice & Video:
+  Input device: Linux Mixer Microphone
+  Output device: Linux Mixer AUX
+
+In the AUX virtual strip:
+  A1 ON lets you hear Discord in your headphones.
+  B1 OFF keeps other people's voices out of your outgoing microphone.
+  B2/B3 OFF unless you deliberately need those mixes.
+
+If you still hear yourself, check Discord's mic test/listen feature, the sound
+interface's direct-monitor switch, and any other monitor/loopback application.
+For one-sided interface mics, open the hardware strip's input menu and select
+the actual input channel or mono downmix.
+
+6. ROUTE MUSIC, BROWSER AND GAMES
+
+Play audio in the app, then open Applications in Linux Mixer. Select the app
+and choose System, Music or AUX. Alternatively choose Linux Mixer System,
+Linux Mixer Music or Linux Mixer AUX in the app's output-device selector.
+Enable A1 on that virtual strip to hear it. Keep its B1 send OFF unless you
+want Discord to hear that app alongside your mic. Turn B1 ON to send it into
+your Discord microphone mix. Be careful with the AUX strip to avoid echo.
+Saved app assignments are reapplied while the mixer controller is running.
+B2 and B3 provide separate virtual microphone mixes if needed.
+
+7. CONTROLS AND RECORDER
+
+Drag/scroll knobs and faders; double-click to reset where supported. Hardware
+strips have denoise, gate, compressor and the color pad. Virtual strips have
+separate L/R EQ controls. Reverb/Delay send knobs feed Special FX; click those
+effect buttons to configure them.
+
+Right-click the recorder panel to choose folder, recording source, format,
+armed inputs, pre-record buffer and other options. REC starts recording; REC
+again pauses/resumes into the SAME file. Stop finalizes/saves it. Click the
+filename area to load audio. Play toggles play/pause; the progress bar seeks.
+The recorder's A1–A5/B1–B3 buttons route playback to those buses.
+
+Pre-fader recording mixes armed inputs before strip processing. Post-fader
+recording captures one selected bus. More than two recorded channels requires
+that bus's Composite mode and patch. See docs/RECORDER.md inside the source
+archive for the full recorder walkthrough and limitations.
+
+8. BACKGROUND, LOGIN AND QUIT
+
+Closing the window hides it and keeps audio running. Launch Linux Mixer again
+to reopen it. Tray/Menu offers stop, restart and quit. Optional Start at login
+is available from the tray. Device changes and engine restarts can briefly
+interrupt playback. Ordinary faders and sends do not restart the devices.
+
+9. TROUBLESHOOTING
+
+Build command missing: install base-devel, then retry makepkg -si.
+Dependency missing: update Arch fully and check pacman's error. Do not bypass
+the dependency or checksum check. Send the full error text back to the sender.
+Compiler killed/out of memory: retry with fewer build workers:
+  CMAKE_BUILD_PARALLEL_LEVEL=2 makepkg -si
+
+No virtual devices / engine fails: check these from a normal user terminal:
+  systemctl --user status pipewire pipewire-pulse wireplumber
+  wpctl status
+  pactl info
+These show whether the desktop audio session is running. Log out/in after
+installing or replacing the audio stack. Do not run the mixer as root.
+
+No app in Applications: start playback in it first. Native JACK or exclusive
+ALSA applications may need separate manual routing.
+No voice: verify hardware input, mute, gate threshold, B1 send, and Discord's
+input device. Temporarily use Bypass to check whether processing blocks it.
+No headphones: verify A1's device, A1 master mute/volume and the strip's A1 send.
+Recording unavailable: verify the engine is running, source devices exist and
+FFmpeg is installed. Make sure the recording folder is writable.
+
+Launch from a terminal with linux-mixer to collect errors. When asking for
+help, include your desktop, PipeWire version, exact error and which step failed.
+Settings normally live in ~/.config/PersonalAudio/Linux Mixer/.
+
+10. UNINSTALL
+
+Quit and stop audio from the mixer first, then run:
+  sudo pacman -R linux-mixer
+
+Your personal settings and recordings are retained. Removing the mixer does
+not revert a system sound-server migration. Keep the source archive alongside
+any binary package you pass on; third-party source and licenses are included.
+
+REFERENCE DOCUMENTATION
+Arch makepkg: https://wiki.archlinux.org/title/Makepkg
+Arch PipeWire: https://wiki.archlinux.org/title/PipeWire

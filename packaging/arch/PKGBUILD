@@ -1,0 +1,21 @@
+# Build from the adjacent source archive; no network fetch during compilation.
+pkgname=linux-mixer
+pkgver=0.3.0
+pkgrel=1
+pkgdesc='Personal PipeWire audio mixing console'
+arch=('x86_64')
+license=('GPL-3.0-or-later')
+depends=('qt6-base' 'qt6-wayland' 'pipewire' 'pipewire-audio' 'pipewire-pulse' 'wireplumber' 'libpulse' 'ffmpeg' 'zam-plugins-ladspa')
+makedepends=('cmake' 'ninja' 'gcc')
+source=("linux-mixer-${pkgver}-source.tar.gz")
+sha256sums=('SKIP') # The release builder replaces this with the archive's SHA256.
+build() {
+  cmake -S "linux-mixer-${pkgver}" -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+check() {
+  ctest --test-dir build --output-on-failure
+}
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

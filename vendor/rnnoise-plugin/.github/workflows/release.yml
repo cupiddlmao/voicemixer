@@ -1,0 +1,119 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag for the release (e.g. 1.01 or 2.25)'
+        required: true
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        config:
+          - {
+            name: "Windows MSVC",
+            os: windows-2019,
+            cc: "cl", cxx: "cl",
+            build_params: "--parallel --config Release",
+            artifact_prefix: "win"
+          }
+          - {
+            name: "Ubuntu Latest GCC",
+            os: ubuntu-latest,
+            cc: "gcc", cxx: "g++",
+            # Build is not parallel because gcc seem to run out of memory
+            build_params: "",
+            artifact_prefix: "linux"
+          }
+          - {
+            name: "macOS Latest Clang",
+            os: macos-latest,
+            cc: "clang", cxx: "clang++",
+            build_params: "--parallel",
+            artifact_prefix: "macos",
+          }
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Ubuntu dependencies
+        if: ${{ matrix.config.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get install --no-install-recommends \
+              libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.config.cc }}
+          CXX: ${{ matrix.config.cxx }}
+          CMAKE_OSX_ARCHITECTURES: "x86_64;arm64"
+        run: >-
+          cmake -B${{runner.workspace}}/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_FOR_RELEASE=1
+          -DBUILD_VERSION=${{ inputs.tag }}
+          -DBUILD_LADSPA_PLUGIN=1
+          -DBUILD_VST_PLUGIN=1
+          -DBUILD_VST3_PLUGIN=1
+          -DBUILD_LV2_PLUGIN=1
+          -DBUILD_AU_PLUGIN=1
+          -DBUILD_AUV3_PLUGIN=1
+
+      - name: Build
+        run: |
+          cmake --build ${{runner.workspace}}/build ${{matrix.config.build_params}}
+
+      - name: Run tests
+        env:
+          CTEST_OUTPUT_ON_FAILURE: 1
+        working-directory: ${{runner.workspace}}/build/src/common/
+        run: ctest
+
+      - name: Upload artifacts
+        id: upload-artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.config.artifact_prefix }}-rnnoise
+          path: |
+            ${{runner.workspace}}/build/bin
+            !**/*.lib
+            !**/*.pdb
+          retention-days: 5
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+
+      # download-artifact@v3 unpacks artifacts
+      # See https://github.com/actions/download-artifact/issues/143
+      - name: Zip
+        run: |
+          zip -r linux-rnnoise linux-rnnoise
+          zip -r win-rnnoise win-rnnoise
+          zip -r macos-rnnoise macos-rnnoise
+
+      - name: Create tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          custom_tag: ${{ inputs.tag }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          tag_name: v${{ inputs.tag }}
+          files: |
+            linux-rnnoise.zip
+            macos-rnnoise.zip
+            win-rnnoise.zip
