@@ -4,7 +4,8 @@ A native Linux audio mixer for PipeWire, with five hardware inputs, three virtua
 app inputs, eight output buses, voice processing and a tape recorder.
 
 **Early release:** tested on Ubuntu 26.04; the Arch build recipe is provided but
-has not yet been tested on Arch. See [Arch setup](docs/ARCH-INSTALL.txt) and
+has not yet been tested on Arch. A [Gentoo/KDE source-build kit](docs/GENTOO-INSTALL.txt)
+is also available and has not yet been tested on Gentoo. See [Arch setup](docs/ARCH-INSTALL.txt) and
 [recorder instructions](docs/RECORDER.md). The executable and virtual devices
 currently retain their `linux-mixer` / **Linux Mixer** names for compatibility.
 
@@ -114,6 +115,12 @@ not all internally smoothed; gain, routing and wet/dry transitions are smoothed.
 
 ## Build and installation
 
+**Audio server:** PipeWire, WirePlumber and `pipewire-pulse` are required.
+PulseAudio applications work through PipeWire's compatibility service; a
+standalone PulseAudio server is not supported. In Konsole/Terminal, `pactl info`
+should identify the server as **PulseAudio (on PipeWire …)**. Having `pulseaudio`
+and `pipewire` in Gentoo's USE flags does not establish which server is running.
+
 Requirements: CMake 3.20+, Ninja, C/C++17 compiler, Qt 6 Core/Gui/Widgets development
 files, and a working PipeWire/WirePlumber session. RNNoise is built from the pinned
 v1.10 source included in `vendor/`, without network access during compilation.
@@ -158,6 +165,12 @@ SDK files and unrelated user files are excluded.
   source archive. Your friend runs `makepkg -si` there to build and install an
   Arch-native `.pkg.tar.zst`. This recipe is prepared but has not been executed
   on Arch yet. The official LADSPA package is `zam-plugins-ladspa`.
+- **Gentoo/KDE**: download the Gentoo ZIP from the 0.3.1 release, extract it and
+  open `INSTALL.txt`. It includes the unchanged 0.3.1 source, dependency/USE
+  requirements, PipeWire checks and a per-user build/install helper. It is a
+  manual source installation, not a prebuilt binary or Portage ebuild, and has
+  not been tested on Gentoo. Generate it with `python3 packaging/gentoo/bundle.py`
+  after producing the matching release source archive.
 - **Other Ubuntu releases**: build from the source archive on that release,
   then run the release script to produce a package linked to that system's Qt.
   Ubuntu 24.04 and other releases have not yet been validated.

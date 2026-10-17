@@ -1,0 +1,154 @@
+VOICEMIXER 0.3.1 — GENTOO / KDE SETUP
+
+This ZIP is a source-build kit, not a prebuilt Gentoo binary or Portage ebuild.
+It includes the same 0.3.1 source used by the other release downloads. Build and
+install it locally as your normal desktop user. Primary target: amd64 with a
+working Gentoo KDE desktop. This kit has NOT been tested on an actual Gentoo
+machine. Other architectures, musl and Gentoo Prefix have not been validated.
+No personal settings or recordings are included.
+
+1. CHECK THE AUDIO SERVER IN KDE
+
+Open Konsole from KDE's application launcher and run:
+  pactl info
+
+Look at Server Name. "PulseAudio (on PipeWire ...)" is the required arrangement.
+An ordinary PulseAudio server without PipeWire is not enough. KDE itself works
+with either server, so having KDE does not establish which one you use.
+
+Also run:
+  pipewire --version
+  wpctl status
+
+The first checks whether PipeWire is installed. wpctl status checks connectivity
+to the running PipeWire session and should show your real devices. A command
+not found or connection error needs attention before launching the mixer.
+Voicemixer requires PipeWire, WirePlumber and pipewire-pulse; PulseAudio apps
+connect through pipewire-pulse. Do not run the standalone PulseAudio server and
+pipewire-pulse on the same user socket.
+
+2. INSTALL BUILD AND RUNTIME DEPENDENCIES
+
+Review the following USE requirements in your existing package.use setup:
+  dev-qt/qtbase:6 gui widgets
+  media-video/pipewire extra sound-server pulseaudio
+  media-video/ffmpeg lame
+
+The PipeWire extra flag supplies pw-record/pw-play. The sound-server flag enables
+its role as the desktop audio server, and pulseaudio enables Pulse support.
+The FFmpeg lame flag is needed for MP3 recording. Keep the flags your desktop
+already needs; do not replace your entire package.use configuration.
+For a Wayland session, keep Qt's Wayland support and qtwayland enabled/installed.
+
+After reviewing Portage's plan, install dependencies as root (or using sudo):
+  emerge --ask --verbose dev-build/cmake app-alternatives/ninja virtual/pkgconfig \
+    dev-qt/qtbase:6 dev-qt/qtwayland:6 media-video/pipewire \
+    media-video/wireplumber media-libs/libpulse media-video/ffmpeg \
+    media-plugins/zam-plugins
+
+You also need a working C and C++17 compiler, normally Gentoo's system GCC with
+C++ support, plus bash, tar and coreutils. libpulse supplies the pactl client;
+it does not mean you should install the standalone PulseAudio daemon.
+Read any requested USE changes and audio-server blockers before accepting.
+
+If already using PipeWire, keep your existing working session startup. If
+migrating from PulseAudio, follow Gentoo's PipeWire guide for your init system:
+  https://wiki.gentoo.org/wiki/PipeWire
+
+On systemd, check normal user units with:
+  systemctl --user status pipewire pipewire-pulse wireplumber
+On OpenRC, use Gentoo's documented user-session/desktop launcher arrangement;
+KDE desktop autostart can handle it. Do not assume systemctl exists on OpenRC.
+Do not start duplicate audio daemons or change services with the build script.
+Log out and back in after a sound-server migration, then repeat step 1.
+
+3. EXTRACT AND BUILD THE ZIP
+
+Extract all files with KDE Ark into one folder. Keep build.sh, SOURCE.sha256
+and linux-mixer-0.3.1-source.tar.gz together. You do not need to extract the
+inner tarball manually. Open Konsole in this folder (Dolphin: Open Terminal Here).
+
+Run as your NORMAL USER, not root:
+  bash build.sh --check
+  bash build.sh --install
+
+The first checks commands, Qt Widgets and ZamGate/ZamComp. It does not change
+services. The second checks the inner source checksum, extracts source, builds
+with two jobs, runs the DSP test and installs under ~/.local. No emerge or sudo
+is run automatically. This is a manual user installation, not Portage-managed.
+
+For a slower machine or low memory:
+  VOICEMIXER_JOBS=1 bash build.sh --install
+
+To only build without installing:
+  bash build.sh
+
+The full vendored RNNoise source and notices are included; compilation does not
+need to fetch that source. Installing system dependencies may need internet.
+
+4. LAUNCH IN KDE
+
+Find Linux Mixer in the application launcher, or run in Konsole:
+  ~/.local/bin/linux-mixer
+
+The repository is named Voicemixer; executable and device names remain Linux
+Mixer for compatibility. If the launcher cannot find the command, ensure
+~/.local/bin is on your session PATH, then log out/in, or use the full path.
+Choose your mic under Hardware Input 1 and headphones under Hardware Out A1.
+Start the engine. Leave unused hardware strips unassigned.
+
+5. DISCORD, OTHER APPS AND RECORDING
+
+Discord input: Linux Mixer Microphone (B1).
+Discord output: Linux Mixer AUX.
+Mic strip: B1 ON and A1 OFF so you do not hear yourself.
+AUX strip: A1 ON and B1 OFF so friends do not hear themselves echoed back.
+
+Play audio in an app, then use Applications in the mixer to assign it to System,
+Music or AUX. A1 sends it to headphones. B1 sends it into your Discord mic mix;
+leave B1 off for things you do not want transmitted. KDE's audio controls can
+also select an app's playback device. Additional B2/B3 mixes are independent.
+
+Right-click the tape recorder for source, format, folder and buffer options.
+REC starts; REC again pauses/resumes into the same file. Stop finalizes it.
+Click the filename area to load audio. Recorder bus buttons route playback.
+See docs/RECORDER.md inside the source tarball for the complete recorder guide.
+
+6. LOGIN STARTUP AND BACKGROUND
+
+Right-click the mixer tray icon and enable Start at login. It writes a desktop
+autostart entry used by KDE; launches in the background on your next login.
+Open the launcher again to show it. Closing the mixer window hides it and keeps
+audio running. Use Menu/tray Quit and stop audio to shut it down deliberately.
+For a custom installation prefix, retain that installed path for login startup.
+
+7. TROUBLESHOOTING / REMOVAL
+
+Missing pw-record/pw-play: check PipeWire's extra USE flag and rebuild it.
+Missing Qt Widgets: check qtbase:6 gui/widgets and your active Qt 6 installation.
+Missing ZamGate/ZamComp: check media-plugins/zam-plugins and its LADSPA files in
+/usr/lib64/ladspa or /usr/lib/ladspa. LV2-only plugin files will not suffice.
+Missing MP3 encoder: rebuild FFmpeg with lame, or choose WAV/AIFF instead.
+No devices: run wpctl status and pactl info as your normal user, never root.
+No voice: check the mic selection, gate threshold, mute, B1 send and app input.
+One-sided interface mic: choose the actual input channel or mono downmix.
+No app in Applications: start playback first; exclusive ALSA/JACK apps may need
+manual routing. Engine restarts/device changes may briefly interrupt playback.
+
+Report the exact failing command/error, init system, desktop session type,
+compiler/Qt versions and audio-server checks when asking for help.
+
+To uninstall, first quit and stop mixer audio. The build/install_manifest.txt
+lists the files this manual install placed under ~/.local. Remove those listed
+files, keeping unrelated files, settings and recordings. Personal configuration
+normally lives under ~/.config/PersonalAudio/Linux Mixer/ and is kept separately.
+An install under a custom prefix uses that prefix instead. No Portage package
+was registered by this kit.
+
+Dependency references:
+https://packages.gentoo.org/packages/dev-qt/qtbase
+https://packages.gentoo.org/packages/media-video/pipewire
+https://packages.gentoo.org/packages/media-video/wireplumber
+https://packages.gentoo.org/packages/media-libs/libpulse
+https://packages.gentoo.org/packages/media-video/ffmpeg
+https://packages.gentoo.org/packages/media-plugins/zam-plugins
