@@ -288,10 +288,10 @@ void Engine::startMeter(){
         if(extraCapture[i-1]<0)continue;
         auto& ptr=extraMeters[i-1];if(!ptr){ptr=std::make_unique<QProcess>();auto* p=ptr.get();
             connect(p,&QProcess::readyReadStandardOutput,this,[this,p,i]{const auto data=p->readAllStandardOutput();float peak=0;for(qsizetype j=0;j+4<=data.size();j+=4){float v;std::memcpy(&v,data.constData()+j,4);if(std::isfinite(v))peak=std::max(peak,std::abs(v));}hardwarePeak[i]=std::max(20*std::log10(std::max(double(peak),.0000316228)),hardwarePeak[i]-3);notify();});}
-        if(ptr->state()==QProcess::NotRunning)ptr->start("pw-record",{"--raw","--target",processedName(i),"--properties","node.dont-fallback=true","--rate","48000","--channels","1","--format","f32","--latency","256","-"});
+        if(ptr->state()==QProcess::NotRunning)ptr->start("pw-record",{"--raw","--target",processedName(i),"--properties","node.dont-fallback=true stream.monitor=true","--rate","48000","--channels","1","--format","f32","--latency","1024","-"});
     }
     if(sourceId<0 || meter.state()!=QProcess::NotRunning)return;
-    meter.setReadChannel(QProcess::StandardOutput);meter.start("pw-record",{"--raw","--target",processed,"--properties","node.dont-fallback=true","--rate","48000","--channels","1","--format","f32","--latency","256","-"});
+    meter.setReadChannel(QProcess::StandardOutput);meter.start("pw-record",{"--raw","--target",processed,"--properties","node.dont-fallback=true stream.monitor=true","--rate","48000","--channels","1","--format","f32","--latency","1024","-"});
 }
 void Engine::setMonitor(bool enabled){
     stopOwned("monitor");

@@ -71,7 +71,7 @@ void Recorder::nextLink(){
 void Recorder::startCapture(){
     if(capture.state()!=QProcess::NotRunning)return;
     inputReady=false;captureCount=s.busMode?8:16;configuredBus=s.busMode;captureBytes.clear();history.clear();QStringList map;for(int i=0;i<captureCount;++i)map<<QString("AUX%1").arg(i);
-    capture.start("pw-record",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true node.always-process=true state.restore-props=false node.name="+prefix+".recorder.capture", "--rate","48000","--channels",QString::number(captureCount),"--channel-map",map.join(','),"--format","f32","--latency","256","-"});
+    capture.start("pw-record",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true node.always-process=true state.restore-props=false node.name="+prefix+".recorder.capture", "--rate","48000","--channels",QString::number(captureCount),"--channel-map",map.join(','),"--format","f32","--latency","512","-"});
 }
 void Recorder::consume(const QJsonArray& graph){
     if(closing||!active)return;
@@ -185,7 +185,7 @@ void Recorder::play(){
     if(std::none_of(s.playback.begin(),s.playback.end(),[](bool v){return v;})){error="Select a playback bus (A1–A5 or B1–B3)";notify();return;}
     if(position>=duration)position=0;
     playStart=position;playing=true;playPaused=false;decoderPending=true;error.clear();
-    player.start("pw-play",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true state.restore-props=false state.restore-target=false node.name="+prefix+".recorder.player", "--rate","48000","--channels","2","--format","f32","--latency","256","-"});notify();
+    player.start("pw-play",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true state.restore-props=false state.restore-target=false node.name="+prefix+".recorder.player", "--rate","48000","--channels","2","--format","f32","--latency","512","-"});notify();
 }
 void Recorder::pause(){
     if(recording){recordPaused=!recordPaused;notify();return;}

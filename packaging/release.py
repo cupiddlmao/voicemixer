@@ -5,10 +5,11 @@ import hashlib
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tarfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.3.1'
+VERSION='0.3.2'
 parser=argparse.ArgumentParser()
 parser.add_argument('--source-only',action='store_true')
 args=parser.parse_args()
@@ -45,6 +46,7 @@ for target in (('arch',) if args.source_only else ('ubuntu26.04','arch')):
             for f in packages:bundle.write(f,f.name)
             instructions='For Ubuntu 26.04 amd64. In the extracted folder run:\n  sudo apt install ./linux-mixer-*.deb\nThen launch Linux Mixer and choose your own mic/headphone devices.\nOther Ubuntu releases need a build for their version.\n'
         bundle.writestr('INSTALL.txt',instructions+'\nThe source archive includes documentation, source and third-party licenses.\n')
+subprocess.run([sys.executable, str(ROOT/'packaging/gentoo/bundle.py'), '--version', VERSION], check=True)
 checks=[]
 for f in sorted(out.glob('*')):
     if f.suffix in ('.gz','.deb','.zip'):checks.append(f'{hashlib.sha256(f.read_bytes()).hexdigest()}  {f.name}\n')

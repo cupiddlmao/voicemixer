@@ -142,8 +142,8 @@ void RoutingMatrix::startMeters(){
         }
         // Private, explicitly linked readers avoid desktop policy restoring a stale target.
         const QString name=i<3?QString("linux_mixer.meter.input%1").arg(i):QString("linux_mixer.meter.bus%1").arg(i-3);
-        const QString properties="node.autoconnect=false node.dont-fallback=true state.restore-target=false state.restore-props=false node.name="+name;
-        meters[i]->start("pw-record",{"--raw","--target","0","--properties",properties,"--rate","48000","--channels","2","--format","f32","--latency","256","-"});
+        const QString properties="node.autoconnect=false node.dont-fallback=true stream.monitor=true state.restore-target=false state.restore-props=false node.name="+name;
+        meters[i]->start("pw-record",{"--raw","--target","0","--properties",properties,"--rate","48000","--channels","2","--format","f32","--latency","1024","-"});
     }
 }
 void RoutingMatrix::refreshApps(){if(appQuery.state()==QProcess::NotRunning)appQuery.start("pactl",{"-f","json","list","sink-inputs"});}

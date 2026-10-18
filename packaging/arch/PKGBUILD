@@ -1,6 +1,6 @@
 # Build from the adjacent source archive; no network fetch during compilation.
 pkgname=linux-mixer
-pkgver=0.3.1
+pkgver=0.3.2
 pkgrel=1
 pkgdesc='Personal PipeWire audio mixing console'
 arch=('x86_64')

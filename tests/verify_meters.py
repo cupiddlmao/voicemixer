@@ -26,6 +26,8 @@ def snapshot():
         assert name in nodes, f'Missing meter: {name}'
         node_id, props = nodes[name]
         assert props.get('node.autoconnect') is False, f'Policy can redirect {name}'
+        assert props.get('stream.monitor') is True, f'Meter is imposing audio-path latency: {name}'
+        assert props.get('node.latency') == '1024/48000', f'Meter is demanding unnecessarily short processing cycles: {name}'
         assert props.get('state.restore-target') is False, f'Stale target can be restored: {name}'
         for channel in ('FL', 'FR'):
             inputs = [p for p, v in ports.items() if v == (node_id, 'input', channel)]

@@ -8,7 +8,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
-parser.add_argument('--version', default='0.3.1')
+parser.add_argument('--version', default='0.3.2')
 parser.add_argument('--source', type=Path)
 args = parser.parse_args()
 version = args.version

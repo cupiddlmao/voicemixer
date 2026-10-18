@@ -165,8 +165,8 @@ SDK files and unrelated user files are excluded.
   source archive. Your friend runs `makepkg -si` there to build and install an
   Arch-native `.pkg.tar.zst`. This recipe is prepared but has not been executed
   on Arch yet. The official LADSPA package is `zam-plugins-ladspa`.
-- **Gentoo/KDE**: download the Gentoo ZIP from the 0.3.1 release, extract it and
-  open `INSTALL.txt`. It includes the unchanged 0.3.1 source, dependency/USE
+- **Gentoo/KDE**: download the Gentoo ZIP from the 0.3.2 release, extract it and
+  open `INSTALL.txt`. It includes the matching 0.3.2 source, dependency/USE
   requirements, PipeWire checks and a per-user build/install helper. It is a
   manual source installation, not a prebuilt binary or Portage ebuild, and has
   not been tested on Gentoo. Generate it with `python3 packaging/gentoo/bundle.py`
@@ -186,6 +186,20 @@ The source archive contains all vendored source and build instructions for the
 shipped RNNoise binary. Keep it alongside the binary when sharing. A portable
 AppImage has not been built; native packages fit the required PipeWire tools and
 LADSPA dependencies better for this first release.
+
+## Updating
+
+Download the newer ZIP for your distribution from GitHub Releases and extract it
+into a fresh folder. First use **Menu → Quit mixer and stop audio**, or the tray
+Quit action; closing the window only hides it and leaves the old version running.
+
+- **Ubuntu 26.04:** install the new `.deb` with `sudo apt install ./linux-mixer-*.deb`.
+- **Arch:** run `makepkg -si` in the new ZIP's extracted folder.
+- **Gentoo:** run `bash build.sh --install` in the new ZIP's extracted folder,
+  using the same installation prefix as before.
+
+Launch Linux Mixer again afterward. Installed per-user settings are kept in the
+same location; do not delete them during an update. There is no automatic updater.
 
 ## Validation and limits
 
