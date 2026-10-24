@@ -8,7 +8,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
-parser.add_argument('--version', default='0.3.2')
+parser.add_argument('--version', default='0.4.0')
 parser.add_argument('--source', type=Path)
 args = parser.parse_args()
 version = args.version
@@ -35,6 +35,7 @@ with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_STORED) as bundle:
     bundle.write(source, expected_name)
     bundle.write(ROOT / 'packaging/gentoo/build.sh', 'build.sh')
     bundle.write(ROOT / 'docs/GENTOO-INSTALL.txt', 'INSTALL.txt')
+    bundle.write(ROOT / 'docs/UPDATING.md', 'UPDATING.md')
     bundle.writestr('SOURCE.sha256', f'{hashlib.sha256(source.read_bytes()).hexdigest()}  {expected_name}\n')
 path.with_suffix('.zip.sha256').write_text(f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n')
 print(path)

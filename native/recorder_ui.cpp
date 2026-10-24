@@ -17,12 +17,12 @@
 #include <QtWidgets/QMessageBox>
 void Console::recorderOptions(){
     auto& recorder=*e.recorder;if(recorder.recording||recorder.finalizing){QMessageBox::information(this,"Recorder options","Stop recording before changing file and source options.");return;}
-    auto& s=e.settings.tape;QDialog dialog(this);dialog.setWindowTitle("Tape Recorder Options · I/O arming");auto* form=new QFormLayout(&dialog);
+    auto& s=e.settings.tape;QDialog dialog(this);styleMixerDialog(dialog);dialog.setMinimumWidth(620);dialog.setWindowTitle("Tape Recorder Options · I/O arming");auto* form=new QFormLayout(&dialog);
     QRadioButton pre("Pre-fader inputs (original signals, mixed to stereo)"),post("Post-fader output (one bus)");pre.setChecked(!s.busMode);post.setChecked(s.busMode);form->addRow(&pre);
     QWidget arms;QGridLayout grid(&arms);std::array<QCheckBox*,8> armed{};
     for(int i=0;i<8;++i){armed[i]=new QCheckBox(i<5?QString("Hardware %1").arg(i+1):QStringList{"System","Music","AUX"}[i-5],&arms);armed[i]->setChecked(s.armed[i]);grid.addWidget(armed[i],i/4,i%4);}form->addRow(&arms);form->addRow(&post);
     QComboBox bus;for(int i=0;i<8;++i)bus.addItem(i<5?QString("A%1").arg(i+1):QString("B%1").arg(i-4));bus.setCurrentIndex(s.bus);form->addRow("Record bus",&bus);
-    QWidget folder;QLineEdit directory(s.directory),prefix(s.prefix);QHBoxLayout folderLayout(&folder);folderLayout.setContentsMargins(0,0,0,0);QPushButton browse("Browse…");folderLayout.addWidget(&directory);folderLayout.addWidget(&browse);
+    QWidget folder;QLineEdit directory(s.directory),prefix(s.prefix);directory.setMinimumWidth(220);directory.setCursorPosition(0);directory.setToolTip(s.directory);QHBoxLayout folderLayout(&folder);folderLayout.setContentsMargins(0,0,0,0);QPushButton browse("Browse…");folderLayout.addWidget(&directory);folderLayout.addWidget(&browse);
     connect(&browse,&QPushButton::clicked,&dialog,[&]{auto path=QFileDialog::getExistingDirectory(&dialog,"Recording folder",directory.text());if(!path.isEmpty())directory.setText(path);});form->addRow("Target directory",&folder);form->addRow("Filename prefix",&prefix);
     QComboBox format,rate,bits,channels;format.addItems({"WAV","BWF","AIFF","MP3"});format.setCurrentText(s.format);for(int v:{8000,11025,16000,22050,24000,32000,44100,48000,88200,96000,176400,192000})rate.addItem(QString::number(v));rate.setCurrentText(QString::number(s.rate));for(int v:{8,16,24,32})bits.addItem(v==32?"32 float":QString::number(v),v);bits.setCurrentIndex(bits.findData(s.bits));for(int i=1;i<=8;++i)channels.addItem(QString::number(i));channels.setCurrentIndex(s.channels-1);
     form->addRow("File type",&format);form->addRow("Sample rate (Hz)",&rate);form->addRow("Bit resolution",&bits);form->addRow("Channels (3–8 require a Composite bus)",&channels);
@@ -43,7 +43,7 @@ void Console::recorderOptions(){
 }
 void Console::busOptions(int index){
     if(e.recorder->recording||e.recorder->finalizing){QMessageBox::information(this,"Bus mode","Stop recording before changing bus topology.");return;}
-    auto& state=e.settings.routing;QDialog dialog(this);dialog.setWindowTitle(QString("Bus %1 · Composite patch").arg(index<5?QString("A%1").arg(index+1):QString("B%1").arg(index-4)));QFormLayout form(&dialog);
+    auto& state=e.settings.routing;QDialog dialog(this);styleMixerDialog(dialog);dialog.setMinimumWidth(440);dialog.setWindowTitle(QString("Bus %1 · Composite patch").arg(index<5?QString("A%1").arg(index+1):QString("B%1").arg(index-4)));QFormLayout form(&dialog);
     QCheckBox composite("Composite: 8 independent pre-fader channels");composite.setChecked(state.busComposite[index]);form.addRow(&composite);
     QCheckBox post("Use post-fader input signals instead of pre-fader");post.setChecked(state.busCompositePost[index]);form.addRow(&post);
     std::array<QComboBox*,8> patches{};
@@ -52,7 +52,7 @@ void Console::busOptions(int index){
     if(dialog.exec()==QDialog::Accepted){bool changed=state.busComposite[index]!=composite.isChecked();state.busComposite[index]=composite.isChecked();changed=changed||state.busCompositePost[index]!=post.isChecked();state.busCompositePost[index]=post.isChecked();for(int c=0;c<8;++c){changed=changed||state.compositePatch[index][c]!=patches[c]->currentIndex();state.compositePatch[index][c]=patches[c]->currentIndex();}e.save();if(changed)e.start();}
 }
 void Console::fxOptions(int effect){
-    auto& s=e.settings.routing;QDialog dialog(this);dialog.setWindowTitle(effect==0?"Special FX · Reverb":"Special FX · Delay");QFormLayout form(&dialog);
+    auto& s=e.settings.routing;QDialog dialog(this);styleMixerDialog(dialog);dialog.setMinimumWidth(320);dialog.setWindowTitle(effect==0?"Special FX · Reverb":"Special FX · Delay");QFormLayout form(&dialog);
     QCheckBox enabled("Enabled");enabled.setChecked(effect==0?s.reverbEnabled:s.delayEnabled);form.addRow(&enabled);
     QDoubleSpinBox first,second;first.setDecimals(2);second.setDecimals(2);
     if(effect==0){first.setRange(0,1);first.setValue(s.room);second.setRange(0,.98);second.setValue(s.damping);form.addRow("Room / decay",&first);form.addRow("Damping",&second);}

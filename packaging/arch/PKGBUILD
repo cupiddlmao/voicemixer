@@ -1,12 +1,13 @@
 # Build from the adjacent source archive; no network fetch during compilation.
 pkgname=linux-mixer
-pkgver=0.3.2
+pkgver=0.4.0
 pkgrel=1
 pkgdesc='Personal PipeWire audio mixing console'
 arch=('x86_64')
 license=('GPL-3.0-or-later')
-depends=('qt6-base' 'qt6-wayland' 'pipewire' 'pipewire-audio' 'pipewire-pulse' 'wireplumber' 'libpulse' 'ffmpeg' 'zam-plugins-ladspa')
-makedepends=('cmake' 'ninja' 'gcc')
+depends=('qt6-base' 'qt6-wayland' 'pipewire' 'pipewire-audio' 'pipewire-pulse' 'wireplumber' 'libpulse' 'ffmpeg' 'zam-plugins-ladspa' 'libx11' 'libxext' 'libxinerama' 'libxrandr' 'libxcursor' 'freetype2')
+makedepends=('cmake' 'ninja' 'gcc' 'pkgconf' 'libx11' 'libxext' 'libxinerama' 'libxrandr' 'libxcursor' 'freetype2' 'alsa-lib')
+optdepends=('yabridge: Windows VST3 bridge' 'yabridgectl: Manage Windows plugin wrappers' 'wine: Run Windows plugin binaries')
 source=("linux-mixer-${pkgver}-source.tar.gz")
 sha256sums=('SKIP') # The release builder replaces this with the archive's SHA256.
 build() {

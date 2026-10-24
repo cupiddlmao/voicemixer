@@ -107,6 +107,13 @@ ratio and lowers threshold without makeup gain. Color: left adds warmth, right
 adds brightness, up adds presence. Double-click a pad to center it or a fader to
 reset it to 0 dB. Bypass retains fader/mute while skipping the effects.
 
+Right-click any hardware Color Panel to switch to its **Position L/R** pad.
+Drag left/right to position that input in ordinary stereo bus mixes; double-click
+to center it. Right-click again to return to Color Panel. Color and position are
+stored independently, so switching views keeps both settings. Position also
+applies to that strip's reverb/delay sends. Pre-fader recordings and Composite
+channel patches remain independent of this stereo bus positioning.
+
 Device changes or engine restarts briefly recreate virtual devices and can
 interrupt playback, including Spotify. Normal faders, effects and sends update
 without recreating devices. The peak limiter protects sample peaks; it is not
@@ -131,7 +138,8 @@ Ubuntu build/runtime packages:
 
 ```bash
 sudo apt install build-essential cmake ninja-build qt6-base-dev qt6-wayland \
-  pipewire pipewire-bin pipewire-pulse wireplumber pulseaudio-utils ffmpeg zam-plugins
+  pipewire pipewire-bin pipewire-pulse wireplumber pulseaudio-utils ffmpeg zam-plugins \
+  pkg-config libpipewire-0.3-dev libasound2-dev libfreetype-dev libx11-dev libxext-dev libxinerama-dev libxrandr-dev libxcursor-dev
 ./run-mixer.sh
 ```
 
@@ -139,7 +147,8 @@ Arch:
 
 ```bash
 sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-wayland \
-  pipewire pipewire-audio pipewire-pulse wireplumber libpulse ffmpeg zam-plugins-ladspa
+  pipewire pipewire-audio pipewire-pulse wireplumber libpulse ffmpeg zam-plugins-ladspa \
+  pkgconf libx11 libxext libxinerama libxrandr libxcursor freetype2 alsa-lib
 ./run-mixer.sh
 ```
 
@@ -259,3 +268,13 @@ and does not control this full mixer.
 Relevant upstream details: [PipeWire filter chains](https://docs.pipewire.org/page_module_filter_chain.html),
 [WirePlumber stream state](https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/stream.html),
 and [Arch LADSPA dependency](https://archlinux.org/packages/extra/x86_64/zam-plugins-ladspa/).
+
+## Input plugins
+
+Click **Plugins** on any input strip for an isolated VST3/LADSPA rack. Windows VST3
+plugins use Wine and yabridge. See [plugin setup and limitations](docs/PLUGINS.md).
+
+## Updating
+
+Install the new version over the old one to keep your settings. Quit the controller
+first and back up the profile. See [upgrade instructions](docs/UPDATING.md).

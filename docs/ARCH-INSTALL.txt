@@ -1,15 +1,15 @@
-LINUX MIXER 0.3.2 — ARCH LINUX SETUP
+LINUX MIXER 0.4.0 — ARCH LINUX SETUP
 
 For a current Arch Linux x86_64 desktop with PipeWire/WirePlumber.
 Internet access and an account with sudo access are needed for dependencies.
-The Arch package recipe has not yet been tested on an Arch machine. The mixer
-and audio checks were tested on Ubuntu. This is a local source build, not a
+The native mixer and audio checks have been tested on CachyOS. The complete
+makepkg recipe has not been tested in a clean Arch installation. This is a local source build, not a
 one-click prebuilt Arch installer.
 
 1. EXTRACT THE ZIP
 
 Extract the entire ZIP into a new folder using your file manager. Keep PKGBUILD
-and linux-mixer-0.3.2-source.tar.gz together. You do not need to extract that
+and linux-mixer-0.4.0-source.tar.gz together. You do not need to extract that
 inner source archive yourself. Open a terminal in the folder containing PKGBUILD
 (often right-click the folder background -> Open Terminal Here).
 
@@ -146,3 +146,6 @@ any binary package you pass on; third-party source and licenses are included.
 REFERENCE DOCUMENTATION
 Arch makepkg: https://wiki.archlinux.org/title/Makepkg
 Arch PipeWire: https://wiki.archlinux.org/title/PipeWire
+
+UPDATING: See UPDATING.md included in this ZIP. Install over the existing app;
+do not delete ~/.config/PersonalAudio/Linux Mixer/.

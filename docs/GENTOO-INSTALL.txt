@@ -1,7 +1,7 @@
-VOICEMIXER 0.3.2 — GENTOO / KDE SETUP
+VOICEMIXER 0.4.0 — GENTOO / KDE SETUP
 
 This ZIP is a source-build kit, not a prebuilt Gentoo binary or Portage ebuild.
-It includes the same 0.3.2 source used by the other release downloads. Build and
+It includes the same 0.4.0 source used by the other release downloads. Build and
 install it locally as your normal desktop user. Primary target: amd64 with a
 working Gentoo KDE desktop. This kit has NOT been tested on an actual Gentoo
 machine. Other architectures, musl and Gentoo Prefix have not been validated.
@@ -44,7 +44,9 @@ After reviewing Portage's plan, install dependencies as root (or using sudo):
   emerge --ask --verbose dev-build/cmake app-alternatives/ninja virtual/pkgconfig \
     dev-qt/qtbase:6 dev-qt/qtwayland:6 media-video/pipewire \
     media-video/wireplumber media-libs/libpulse media-video/ffmpeg \
-    media-plugins/zam-plugins
+    media-plugins/zam-plugins media-libs/freetype media-libs/alsa-lib \
+    x11-libs/libX11 x11-libs/libXext x11-libs/libXinerama \
+    x11-libs/libXrandr x11-libs/libXcursor
 
 You also need a working C and C++17 compiler, normally Gentoo's system GCC with
 C++ support, plus bash, tar and coreutils. libpulse supplies the pactl client;
@@ -65,7 +67,7 @@ Log out and back in after a sound-server migration, then repeat step 1.
 3. EXTRACT AND BUILD THE ZIP
 
 Extract all files with KDE Ark into one folder. Keep build.sh, SOURCE.sha256
-and linux-mixer-0.3.2-source.tar.gz together. You do not need to extract the
+and linux-mixer-0.4.0-source.tar.gz together. You do not need to extract the
 inner tarball manually. Open Konsole in this folder (Dolphin: Open Terminal Here).
 
 Run as your NORMAL USER, not root:
@@ -152,3 +154,6 @@ https://packages.gentoo.org/packages/media-video/wireplumber
 https://packages.gentoo.org/packages/media-libs/libpulse
 https://packages.gentoo.org/packages/media-video/ffmpeg
 https://packages.gentoo.org/packages/media-plugins/zam-plugins
+
+UPDATING: See UPDATING.md included in this ZIP. Install over the existing app;
+do not delete ~/.config/PersonalAudio/Linux Mixer/. Plugins and Wine are optional.

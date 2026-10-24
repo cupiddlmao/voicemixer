@@ -6,6 +6,8 @@
 
 class QPainter;
 class QTimer;
+class QDialog;
+void styleMixerDialog(QDialog&);
 class Console : public QWidget {
 public:
     explicit Console(Engine& engine);
@@ -25,13 +27,13 @@ protected:
 private:
     Engine& e;
     enum Action { None, Mic, Output, Start, Menu, Comp, Gate, Denoise, Bypass,
-                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, BusMode, FxSend, FxOptions, Balance, BusMono };
+                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono };
     struct Hit {QRectF rect;Action action;QString tip;int first=-1,second=-1;};
     std::vector<Hit> hits;
     Action dragging=None;
     QPointF dragStart;
     double dragValue=0;
-    int dragIndex=0,dragBand=0;
+    int dragIndex=0,dragBand=0,dragAxis=0;
     QTimer* transportTimer=nullptr;
     int transportDirection=0;
     QPointF logical(const QPointF&) const;

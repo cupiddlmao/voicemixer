@@ -15,6 +15,7 @@ for tool in cmake ctest ninja cc c++ pkg-config sha256sum tar pipewire pw-cli pw
 done
 if (( missing )); then printf 'See INSTALL.txt for Gentoo dependencies and USE flags.\n' >&2; exit 1; fi
 if ! pkg-config --exists Qt6Widgets; then printf 'Qt 6 Widgets development files missing; see dev-qt/qtbase:6[gui,widgets] in INSTALL.txt.\n' >&2; exit 1; fi
+if ! pkg-config --exists libpipewire-0.3 freetype2 x11 xext xinerama xrandr xcursor; then printf 'Plugin-host development headers missing; see INSTALL.txt for PipeWire, FreeType and X11 libraries.\n'; exit 1; fi
 plugins_found=0
 for dir in /usr/lib/ladspa /usr/lib64/ladspa /usr/lib/x86_64-linux-gnu/ladspa; do
   if [[ -r "$dir/ZamGate-ladspa.so" && -r "$dir/ZamComp-ladspa.so" ]]; then plugins_found=1; break; fi

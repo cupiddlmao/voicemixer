@@ -1,6 +1,7 @@
 #include "paths.h"
 #include "engine.h"
 #include "routing.h"
+#include "plugin_racks.h"
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QFile>
@@ -26,7 +27,7 @@ QString processedName(int i){return i==0?"linux_mixer.processed":QString("linux_
 QJsonObject HardwareSettings::json()const {
     return {{"mic",mic},{"channel",channel},{"threshold",threshold},{"attack",attack},{"release",release},
         {"compression",compression},{"colorX",colorX},{"colorY",colorY},{"gain",gain},
-        {"denoise",denoise},{"bypass",bypass},{"mute",mute}};
+        {"denoise",denoise},{"bypass",bypass},{"mute",mute},{"positionPanel",positionPanel}};
 }
 void HardwareSettings::load(const QJsonObject& o){
     mic=o.value("mic").toString(mic);channel=o.value("channel").toString(channel);
@@ -34,14 +35,16 @@ void HardwareSettings::load(const QJsonObject& o){
     attack=bounded(o,"attack",attack,.1,500);release=bounded(o,"release",release,.1,500);
     compression=bounded(o,"compression",compression,0,10);
     colorX=bounded(o,"colorX",colorX,0,1);colorY=bounded(o,"colorY",colorY,0,1);gain=bounded(o,"gain",gain,-60,12);
+    positionPanel=o.value("positionPanel").toBool(false);
     denoise=o.value("denoise").toBool(denoise);bypass=o.value("bypass").toBool(bypass);mute=o.value("mute").toBool(mute);
 }
 QJsonObject Settings::json() const {
     auto o=HardwareSettings::json();QJsonArray hardware;for(int i=0;i<5;++i)hardware.append(this->hardware(i).json());
-    o.insert("engineEnabled",engineEnabled);o.insert("tape",tape.json());o.insert("version",3);o.insert("hardware",hardware);o.insert("routing",routing.json());o.insert("sink",sink);
+    QJsonArray racks;for(bool enabled:pluginRacks)racks.append(enabled);o.insert("pluginRacks",racks);o.insert("engineEnabled",engineEnabled);o.insert("tape",tape.json());o.insert("version",3);o.insert("hardware",hardware);o.insert("routing",routing.json());o.insert("sink",sink);
     return o;
 }
 void Settings::load(const QJsonObject& o) {
+    const auto racks=o.value("pluginRacks").toArray();for(int i=0;i<8&&i<racks.size();++i)pluginRacks[i]=racks[i].toBool();
     tape.load(o.value("tape").toObject());HardwareSettings::load(o);const auto hardware=o.value("hardware").toArray();for(int i=0;i<5&&i<hardware.size();++i)this->hardware(i).load(hardware[i].toObject());
     engineEnabled=o.value("engineEnabled").toBool(engineEnabled);sink=o.value("sink").toString(sink);
     if(o.value("routing").isObject())routing.load(o.value("routing").toObject());
@@ -61,6 +64,7 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
     QDir().mkpath(runtime);
     QFile saved(root+"/settings.json");
     if(saved.open(QIODevice::ReadOnly)) settings.load(QJsonDocument::fromJson(saved.readAll()).object());
+    plugins=std::make_unique<PluginRacks>(*this);
     matrix=std::make_unique<RoutingMatrix>(*this);
     recorder=std::make_unique<Recorder>(settings.tape,[this]{std::array<RecorderSource,5> result;for(int i=0;i<5;++i)result[i]={settings.hardware(i).mic,settings.hardware(i).channel};return result;},this);
     recorder->changed=[this]{notify();};recorder->needGraph=[this]{refresh();};
@@ -102,6 +106,7 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
         else if(running && !micPresent) {message="Microphone disconnected · waiting for the selected device";}
         else if(running) {message="48 kHz · mono · processing live"; startMeter();}
         else {message="Engine stopped · choose your mic, then Start"; if(meter.state()!=QProcess::NotRunning) meter.terminate();}
+        plugins->sync(running&&!stoppedExplicitly);
         matrix->consume(data.array(),!stoppedExplicitly && (microphoneCompatible || (settings.engineEnabled && ownedPid("engine")>0 && settings.mic.isEmpty() && std::all_of(settings.extra.begin(),settings.extra.end(),[](const auto& hw){return hw.mic.isEmpty();}))));
         if(running&&!microphoneCompatible)message="Restart audio engine to activate the new routing matrix";
         else if(running&&micPresent&&matrix->ready)message="48 kHz · 5 hardware / 3 virtual inputs · routing live";
@@ -141,12 +146,13 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
     });
     connect(&meter,&QProcess::finished,this,[this]{peakDb=-90;meterBuffer.clear();notify();});
     refreshTimer.setInterval(1800); connect(&refreshTimer,&QTimer::timeout,this,[this]{refresh();});refreshTimer.start();
-    applyTimer.setSingleShot(true);applyTimer.setInterval(35);connect(&applyTimer,&QTimer::timeout,this,[this]{sendControls();});
+    saveTimer.setSingleShot(true);saveTimer.setInterval(300);connect(&saveTimer,&QTimer::timeout,this,[this]{save();});
+    applyTimer.setSingleShot(true);applyTimer.setInterval(20);connect(&applyTimer,&QTimer::timeout,this,[this]{sendControls();});
     QTimer::singleShot(0,this,[this]{refresh();});
 }
 Engine::~Engine() {shutdown();}
 void Engine::shutdown(){
-    recorder->shutdown();save();refreshTimer.stop();applyTimer.stop();
+    plugins->shutdown();recorder->shutdown();save();refreshTimer.stop();applyTimer.stop();saveTimer.stop();
     for(auto& p:extraControls)if(p&&p->state()!=QProcess::NotRunning)p->waitForFinished(1000);
     for(auto& p:extraMeters)if(p&&p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(500);}
     if(control.state()!=QProcess::NotRunning)control.waitForFinished(1000);
@@ -164,7 +170,7 @@ void Engine::shutdown(){
 }
 void Engine::notify(){if(changed)changed();}
 void Engine::refresh(){if(discovery.state()==QProcess::NotRunning)discovery.start("pw-dump");}
-void Engine::save(){if(!writeJson(root+"/settings.json",settings.json())){message="Could not save settings";notify();}}
+void Engine::save(){saveTimer.stop();if(!writeJson(root+"/settings.json",settings.json())){message="Could not save settings";notify();}}
 qint64 Engine::ownedPid(const QString& kind) const {
     QFile pidFile(runtime+"/"+kind+".pid");if(!pidFile.open(QIODevice::ReadOnly))return 0;
     bool ok=false;const qint64 pid=pidFile.readAll().trimmed().toLongLong(&ok);if(!ok || pid<=1)return 0;
@@ -251,14 +257,15 @@ void Engine::start(){
     });
 }
 void Engine::stop(){
-    recorder->setActive(false);settings.engineEnabled=false;stoppedExplicitly=true;restartRequested=false;save();starting=false;stopOwned("monitor");matrix->stop();stopOwned("aux");stopOwned("engine");
+    plugins->sync(false);recorder->setActive(false);settings.engineEnabled=false;stoppedExplicitly=true;restartRequested=false;save();starting=false;stopOwned("monitor");matrix->stop();stopOwned("aux");stopOwned("engine");
     for(auto& p:extraMeters)if(p){p->terminate();p->waitForFinished(500);}
     hardwarePeak.fill(-90);
     if(meter.state()!=QProcess::NotRunning)meter.terminate();
     if(auxMeter.state()!=QProcess::NotRunning)auxMeter.terminate();
     running=auxRunning=false;captureId=sourceId=broadcastId=auxId=-1;peakDb=heldDb=auxPeakDb=-90;message="Engine stopped";notify();
 }
-void Engine::apply(){save();applyTimer.start();notify();}
+// Throttle live updates instead of debouncing until pointer movement stops.
+void Engine::apply(){if(!applyTimer.isActive())applyTimer.start();saveTimer.start();notify();}
 void Engine::sendControls(){
     matrix->apply();
     for(int index=0;index<5;++index){

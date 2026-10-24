@@ -18,6 +18,9 @@
 #include <QtCore/QFile>
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
+void runPositionTest(QApplication&,Engine&,Console&);
+void runPluginRoutingTest(QApplication&,Engine&,Console&);
+void runLiveControlsTest(QApplication&,Engine&,Console&);
 void runAppRoutingTest(QApplication&,Engine&);
 
 static void setDesktopMaximized(Console& window,bool maximize) {
@@ -82,7 +85,7 @@ int main(int argc,char** argv) {
         }return 0;
     }
     Console window(engine);Console& console=window;
-    const bool testing=args.contains("--smoke-test")||args.contains("--app-routing-test")||args.contains("--screenshot");
+    const bool testing=(args.contains("--position-test")||args.contains("--live-controls-test")||args.contains("--plugin-routing-test"))||args.contains("--smoke-test")||args.contains("--app-routing-test")||args.contains("--screenshot");
     QSystemTrayIcon tray;QMenu trayMenu;
     QPixmap icon(64,64);icon.fill(QColor("#20333d"));{QPainter p(&icon);p.setPen(QPen(QColor("#7aceaa"),5));for(int i=0;i<3;++i){p.drawLine(16+i*16,10,16+i*16,54);p.drawEllipse(QPoint(16+i*16,24+i*9),5,5);}}
     app.setWindowIcon(QIcon(icon));tray.setIcon(QIcon(icon));tray.setToolTip("Linux Mixer · audio and app routing running");
@@ -101,7 +104,7 @@ int main(int argc,char** argv) {
     });
     trayMenu.addSeparator();trayMenu.addAction("Quit and stop audio",&window,[&]{engine.stop();app.quit();});
     tray.setContextMenu(&trayMenu);QObject::connect(&tray,&QSystemTrayIcon::activated,&window,[&](QSystemTrayIcon::ActivationReason reason){if(reason==QSystemTrayIcon::Trigger||reason==QSystemTrayIcon::DoubleClick)showWindow();});
-    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
+    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
     if(!testing){app.setQuitOnLastWindowClosed(false);window.closeToBackground=[&]{window.hide();};tray.show();reopen.start();}
 
     window.setDesktopMaximized=[&window](bool maximize){setDesktopMaximized(window,maximize);};
@@ -110,8 +113,11 @@ int main(int argc,char** argv) {
         const auto parts=args[i+1].split('x');if(parts.size()!=2)return 2;
         window.resize(parts[0].toInt(),parts[1].toInt());
     }
-    if(args.contains("--window-size") || args.contains("--smoke-test") || args.contains("--app-routing-test"))window.show();
+    if((args.contains("--position-test")||args.contains("--live-controls-test")||args.contains("--plugin-routing-test")) || args.contains("--window-size") || args.contains("--smoke-test") || args.contains("--app-routing-test"))window.show();
     else if(!args.contains("--background"))setDesktopMaximized(window,true);
+    if(args.contains("--plugin-routing-test"))runPluginRoutingTest(app,engine,console);
+    if(args.contains("--position-test"))runPositionTest(app,engine,console);
+    if(args.contains("--live-controls-test"))runLiveControlsTest(app,engine,console);
     if(args.contains("--smoke-test"))runSmoke(app,engine,console);
     if(args.contains("--app-routing-test"))runAppRoutingTest(app,engine);
     if(args.contains("--screenshot")){

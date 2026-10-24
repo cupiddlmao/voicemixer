@@ -7,6 +7,7 @@ struct RecorderSettings;
 struct RoutingSettings {
     std::array<QString,5> outputs{};
     std::array<double,3> inputGain{};
+    std::array<double,5> hardwarePan{};
     std::array<bool,3> inputMute{};
     std::array<double,8> busGain{};
     std::array<bool,8> busMute{};
@@ -21,6 +22,7 @@ struct RoutingSettings {
     double room=.55,damping=.35,delayMs=350,feedback=.3;
     QJsonObject appRules;
     RoutingSettings();
+    double panGain(int input,int channel) const;
     QJsonObject json() const;
     void load(const QJsonObject&);
 };

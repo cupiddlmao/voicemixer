@@ -2,6 +2,7 @@
 #include "routing.h"
 #include "hardware_links.h"
 #include "engine.h"
+#include "plugin_racks.h"
 #include <QtCore/QCoreApplication>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
@@ -19,6 +20,7 @@ static QString edge(int out,int in){return QString::number(out)+":"+QString::num
 RoutingMatrix::RoutingMatrix(Engine& e):QObject(&e),engine(e),runtime(stateRoot()+"/.runtime"){
     connect(&worker,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){
         const auto error=QString::fromUtf8(worker.readAllStandardError()).trimmed();
+        if(code!=0)lastParameters.clear();
         if(code!=0 && !worker.property("quiet").toBool() && !error.contains("File exists")){
             engine.message="Routing command failed: "+error;if(engine.changed)engine.changed();
             const auto args=worker.arguments();
@@ -27,7 +29,7 @@ RoutingMatrix::RoutingMatrix(Engine& e):QObject(&e),engine(e),runtime(stateRoot(
         next();
     });
     connect(&worker,&QProcess::errorOccurred,this,[this](QProcess::ProcessError error){
-        if(error==QProcess::FailedToStart){engine.message="Missing audio command: "+worker.program();if(engine.changed)engine.changed();QTimer::singleShot(0,this,[this]{next();});}
+        if(error==QProcess::FailedToStart){lastParameters.clear();engine.message="Missing audio command: "+worker.program();if(engine.changed)engine.changed();QTimer::singleShot(0,this,[this]{next();});}
     });
     connect(&appQuery,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){if(code==0){const auto doc=QJsonDocument::fromJson(appQuery.readAllStandardOutput());if(doc.isArray())parseApps(doc.array());}});
 }
@@ -63,10 +65,10 @@ void RoutingMatrix::start(){
     QTimer::singleShot(6000,this,[this]{if(starting&&!ready){starting=false;failed=true;engine.message="Routing graph failed; see .runtime/matrix.log";if(engine.changed)engine.changed();}});
 }
 void RoutingMatrix::consume(const QJsonArray& graph,bool compatible){
-    nodeIds.clear();sinkBySerial.clear();hardwareSinkIds.clear();ports.clear();links.clear();
+    nodeIds.clear();nodeSerials.clear();sinkBySerial.clear();hardwareSinkIds.clear();ports.clear();links.clear();
     for(const auto& v:graph){const auto item=v.toObject(),info=item.value("info").toObject(),p=info.value("props").toObject();const int id=item.value("id").toInt();const QString type=item.value("type").toString();
         if(type=="PipeWire:Interface:Node"){
-            const auto name=p.value("node.name").toString();nodeIds.insert(name,id);
+            const auto name=p.value("node.name").toString();nodeIds.insert(name,id);nodeSerials.insert(name,p.value("object.serial").toInteger());
             if(p.value("media.class").toString()=="Audio/Sink")sinkBySerial.insert(p.value("object.serial").toInt(),name);
             if(p.value("media.class").toString()=="Audio/Sink"&&!name.startsWith("linux_mixer."))hardwareSinkIds.insert(id);
         }else if(type=="PipeWire:Interface:Port"){
@@ -87,12 +89,29 @@ int RoutingMatrix::port(const QString& node,const QString& channel,const QString
 }
 void RoutingMatrix::link(int out,int in){if(out<0||in<0||links.contains(edge(out,in)))return;queue("pw-link",{QString::number(out),QString::number(in)},true);}
 void RoutingMatrix::synchronizeLinks(){
+    std::array<bool,8> inserts{};
+    // Only switch a strip when both sides of its isolated host are present.
+    // A failed/missing host automatically leaves the original dry path intact.
+    for(int input=0;input<8;++input){
+        const QString host=pluginNodeName(input);
+        inserts[input]=engine.plugins->running(input);
+        for(const auto& channel:QStringList{"FL","FR"})inserts[input]=inserts[input]&&port(host,channel,"input")>=0&&port(host,channel,"output")>=0;
+        if(!inserts[input])continue;
+        const QString source=input<5?processedName(input):QString("linux_mixer.input%1.output").arg(input-5);
+        for(int c=0;c<2;++c)link(port(source,input<5?"MONO":c==0?"FL":"FR","output"),port(host,c==0?"FL":"FR","input"));
+    }
     for(int bus=0;bus<8;++bus){
         for(int input=0;input<8;++input)for(int channel=0;channel<2;++channel){
             QString node=input<5?processedName(input):QString("linux_mixer.input%1.output").arg(input-5);QString channelName=input<5?"MONO":channel==0?"FL":"FR";
             if(engine.settings.routing.busComposite[bus]&&!engine.settings.routing.busCompositePost[bus]){node=input<5?engine.settings.hardware(input).mic:virtualInputName(input-5);channelName=input<5?engine.settings.hardware(input).channel:channel==0?"FL":"FR";if(input<5&&channelName=="MONO"&&port(node,"MONO","output")<0)channelName=channel==0?"FL":"FR";}
+            const bool rawComposite=engine.settings.routing.busComposite[bus]&&!engine.settings.routing.busCompositePost[bus];
+            if(inserts[input]&&!rawComposite){node=pluginNodeName(input);channelName=channel==0?"FL":"FR";}
             const int output=port(node,channelName,"output");
-            link(output,port(busCaptureName(bus),QString("AUX%1").arg(input*2+channel),"input"));
+            const int destination=port(busCaptureName(bus),QString("AUX%1").arg(input*2+channel),"input");
+            // Remove the old dry/plugin edge before adding its replacement;
+            // mixing both would double the signal and spoil stereo effects.
+            for(const auto& existing:ports)if(existing.direction=="output"&&existing.id!=output&&links.contains(edge(existing.id,destination)))queue("pw-link",{"-d",QString::number(existing.id),QString::number(destination)},true);
+            link(output,destination);
         }
         if(bus<5){
             const QString target=engine.settings.routing.outputs[bus];
@@ -111,13 +130,13 @@ void RoutingMatrix::synchronizeLinks(){
 void RoutingMatrix::apply(){
     if(!ready)return;
     if(worker.state()!=QProcess::NotRunning||!commands.empty()){dirty=true;return;}
-    auto set=[this](const QString& node,const QJsonArray& values){const int id=nodeIds.value(node,-1);if(id>=0)queue("pw-cli",{"set-param",QString::number(id),"Props",QString::fromUtf8(QJsonDocument(QJsonObject{{"params",values}}).toJson(QJsonDocument::Compact))});};
+    auto set=[this](const QString& node,const QJsonArray& values){const int id=nodeIds.value(node,-1);if(id<0)return;const qint64 serial=nodeSerials.value(node,-1);const auto previous=lastParameters.constFind(node);if(previous!=lastParameters.cend()&&previous->first==serial&&previous->second==values)return;lastParameters.insert(node,{serial,values});queue("pw-cli",{"set-param",QString::number(id),"Props",QString::fromUtf8(QJsonDocument(QJsonObject{{"params",values}}).toJson(QJsonDocument::Compact))});};
     const auto& state=engine.settings.routing;
     for(int i=0;i<3;++i){const double gain=state.inputMute[i]?0:std::pow(10,state.inputGain[i]/20);QJsonArray values{"left:Mult",gain,"right:Mult",gain};for(int c=0;c<2;++c)for(int band=0;band<3;++band){values.append(QString(c==0?"leftEq%1:Gain":"rightEq%1:Gain").arg(band));values.append(state.eq[i][c*3+band]);}set(virtualInputName(i),values);}
-    for(int b=0;b<8;++b){QJsonArray values;for(int i=0;i<8;++i){values.append(QString("left:Gain %1").arg(i+1));values.append(state.routes[i][b]?1.:0.);values.append(QString("right:Gain %1").arg(i+1));values.append(state.routes[i][b]?1.:0.);}
+    for(int b=0;b<8;++b){QJsonArray values;for(int i=0;i<8;++i){values.append(QString("left:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.panGain(i,0):0.);values.append(QString("right:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.panGain(i,1):0.);}
         const double gain=state.busMute[b]?0:std::pow(10,state.busGain[b]/20);values.append("gainL:Mult");values.append(gain*(1-std::max(0.,state.busBalance[b])));values.append("gainR:Mult");values.append(gain*(1+std::min(0.,state.busBalance[b])));if(state.busComposite[b]){values={};for(int c=0;c<8;++c){values.append(QString("compositeGain%1:Mult").arg(c));values.append(gain);}for(int c=0;c<2;++c){values.append(QString("compositeTape%1:Gain 2").arg(c));values.append(engine.settings.tape.playback[b]?std::pow(10,engine.settings.tape.gain/20):0.);}}
         else {
-            for(int effect=0;effect<2;++effect)for(int side=0;side<2;++side)for(int input=0;input<8;++input){values.append(QString(effect==0?"verb%1:Gain %2":"echo%1:Gain %2").arg(side).arg(input+1));values.append(state.routes[input][b]?state.fxAmount[input]*(effect==0&&state.reverbEnabled?state.reverbSend[input]:effect==1&&state.delayEnabled?state.delaySend[input]:0.):0.);}
+            for(int effect=0;effect<2;++effect)for(int side=0;side<2;++side)for(int input=0;input<8;++input){values.append(QString(effect==0?"verb%1:Gain %2":"echo%1:Gain %2").arg(side).arg(input+1));values.append(state.routes[input][b]?state.panGain(input,side)*state.fxAmount[input]*(effect==0&&state.reverbEnabled?state.reverbSend[input]:effect==1&&state.delayEnabled?state.delaySend[input]:0.):0.);}
             const std::array<const char*,6> keys{"fx:Room","fx:Damping","fx:Delay ms","fx:Feedback","fx:Reverb return","fx:Delay return"};const std::array<double,6> fx{state.room,state.damping,state.delayMs,state.feedback,state.reverbEnabled?state.reverbReturn[b]:0.,state.delayEnabled?state.delayReturn[b]:0.};for(int k=0;k<6;++k){values.append(keys[k]);values.append(fx[k]);}
 
             for(int side=0;side<2;++side)for(int channel=0;channel<2;++channel){values.append(QString(side==0?"monoL:Gain %1":"monoR:Gain %1").arg(channel+1));values.append(state.busMono[b]?.5:side==channel?1.:0.);}

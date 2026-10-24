@@ -7,6 +7,11 @@
 #include <cmath>
 
 RoutingSettings::RoutingSettings(){fxAmount.fill(1);reverbReturn.fill(1);delayReturn.fill(1);for(auto& patch:compositePatch)for(int i=0;i<8;++i)patch[i]=i;routes[0][5]=true;for(int i=5;i<8;++i)routes[i][0]=true;}
+double RoutingSettings::panGain(int input,int channel)const{
+    if(input<0||input>=5)return 1.;
+    const double pan=std::clamp(hardwarePan[input],-1.,1.);
+    return channel==0?1-std::max(0.,pan):1+std::min(0.,pan);
+}
 QJsonObject RoutingSettings::json()const{
     QJsonArray out,ig,im,bg,bm,rt;
     for(const auto& v:outputs)out.append(v);
@@ -17,7 +22,7 @@ QJsonObject RoutingSettings::json()const{
     for(const auto& row:routes){QJsonArray r;for(auto v:row)r.append(v);rt.append(r);}
     QJsonArray eqs,composite,post,patches,mono,balance;for(const auto& row:eq){QJsonArray a;for(double v:row)a.append(v);eqs.append(a);}for(int i=0;i<8;++i){composite.append(busComposite[i]);post.append(busCompositePost[i]);mono.append(busMono[i]);balance.append(busBalance[i]);QJsonArray a;for(int v:compositePatch[i])a.append(v);patches.append(a);}
     auto array=[](const auto& values){QJsonArray a;for(auto v:values)a.append(v);return a;};
-    return {{"reverbSend",array(reverbSend)},{"delaySend",array(delaySend)},{"fxAmount",array(fxAmount)},{"reverbReturn",array(reverbReturn)},{"delayReturn",array(delayReturn)},{"reverbEnabled",reverbEnabled},{"delayEnabled",delayEnabled},{"room",room},{"damping",damping},{"delayMs",delayMs},{"feedback",feedback},{"eq",eqs},{"busComposite",composite},{"busCompositePost",post},{"compositePatch",patches},{"busMono",mono},{"busBalance",balance},{"outputs",out},{"inputGain",ig},{"inputMute",im},{"busGain",bg},{"busMute",bm},{"routes",rt},{"appRules",appRules}};
+    return {{"hardwarePan",array(hardwarePan)},{"reverbSend",array(reverbSend)},{"delaySend",array(delaySend)},{"fxAmount",array(fxAmount)},{"reverbReturn",array(reverbReturn)},{"delayReturn",array(delayReturn)},{"reverbEnabled",reverbEnabled},{"delayEnabled",delayEnabled},{"room",room},{"damping",damping},{"delayMs",delayMs},{"feedback",feedback},{"eq",eqs},{"busComposite",composite},{"busCompositePost",post},{"compositePatch",patches},{"busMono",mono},{"busBalance",balance},{"outputs",out},{"inputGain",ig},{"inputMute",im},{"busGain",bg},{"busMute",bm},{"routes",rt},{"appRules",appRules}};
 }
 void RoutingSettings::load(const QJsonObject& o){
     auto numbers=[](auto& target,const QJsonArray& source){for(int i=0;i<int(target.size()) && i<source.size();++i){const double v=source[i].toDouble(target[i]);if(std::isfinite(v))target[i]=std::clamp(v,-60.,12.);}};
@@ -30,6 +35,7 @@ void RoutingSettings::load(const QJsonObject& o){
     const auto eqs=o.value("eq").toArray();for(int i=0;i<3&&i<eqs.size();++i){numbers(eq[i],eqs[i].toArray());for(auto& v:eq[i])v=std::clamp(v,-12.,12.);}
     const auto patches=o.value("compositePatch").toArray();for(int i=0;i<8&&i<patches.size();++i){auto a=patches[i].toArray();for(int c=0;c<8&&c<a.size();++c)compositePatch[i][c]=std::clamp(a[c].toInt(),0,15);}
     const auto out=o.value("outputs").toArray();for(int i=0;i<5 && i<out.size();++i)if(out[i].isString())outputs[i]=out[i].toString();
+    hardwarePan.fill(0);numbers(hardwarePan,o.value("hardwarePan").toArray());for(auto& v:hardwarePan)v=std::clamp(v,-1.,1.);
     numbers(inputGain,o.value("inputGain").toArray());flags(inputMute,o.value("inputMute").toArray());
     numbers(busGain,o.value("busGain").toArray());flags(busMute,o.value("busMute").toArray());
     const auto rt=o.value("routes").toArray();for(int i=0;i<8 && i<rt.size();++i)flags(routes[rt.size()==4 && i>0?i+4:i],rt[i].toArray());
@@ -66,10 +72,10 @@ QJsonObject matrixConfiguration(const RoutingSettings& s,const QString& prefix,c
         QJsonArray nodes,links,inputs,positions;
         for(int c=0;c<18;++c){const QString n=QString("input%1").arg(c);nodes.append(filter(n,"copy"));inputs.append(n+":In");positions.append(QString("AUX%1").arg(c));
             if(c<16)links.append(QJsonObject{{"output",n+":Out"},{"input",QString(c%2?"right:In %1":"left:In %1").arg(c/2+1)}});}
-        QJsonObject controls;for(int input=0;input<8;++input)controls.insert(QString("Gain %1").arg(input+1),s.routes[input][bus]?1.:0.);
-        nodes.append(filter("left","mixer",controls));nodes.append(filter("right","mixer",controls));
-        for(int effect=0;effect<2;++effect){QJsonObject send;for(int input=0;input<8;++input)send.insert(QString("Gain %1").arg(input+1),s.routes[input][bus]?s.fxAmount[input]*(effect==0&&s.reverbEnabled?s.reverbSend[input]:effect==1&&s.delayEnabled?s.delaySend[input]:0.):0.);
-            for(int c=0;c<2;++c){const QString mix=QString(effect==0?"verb%1":"echo%1").arg(c);nodes.append(filter(mix,"mixer",send));for(int input=0;input<8;++input)links.append(QJsonObject{{"output",QString("input%1:Out").arg(input*2+c)},{"input",mix+QString(":In %1").arg(input+1)}});}
+        for(int c=0;c<2;++c){QJsonObject controls;for(int input=0;input<8;++input)controls.insert(QString("Gain %1").arg(input+1),s.routes[input][bus]?s.panGain(input,c):0.);
+            nodes.append(filter(c==0?"left":"right","mixer",controls));}
+        for(int effect=0;effect<2;++effect)for(int c=0;c<2;++c){QJsonObject send;for(int input=0;input<8;++input)send.insert(QString("Gain %1").arg(input+1),s.routes[input][bus]?s.panGain(input,c)*s.fxAmount[input]*(effect==0&&s.reverbEnabled?s.reverbSend[input]:effect==1&&s.delayEnabled?s.delaySend[input]:0.):0.);
+            const QString mix=QString(effect==0?"verb%1":"echo%1").arg(c);nodes.append(filter(mix,"mixer",send));for(int input=0;input<8;++input)links.append(QJsonObject{{"output",QString("input%1:Out").arg(input*2+c)},{"input",mix+QString(":In %1").arg(input+1)}});
         }
         nodes.append(QJsonObject{{"type","ladspa"},{"plugin",pluginPath("libmixer_dsp.so")},{"name","fx"},{"label","stereo_fx"},{"control",QJsonObject{{"Room",s.room},{"Damping",s.damping},{"Delay ms",s.delayMs},{"Feedback",s.feedback},{"Reverb return",s.reverbEnabled?s.reverbReturn[bus]:0.},{"Delay return",s.delayEnabled?s.delayReturn[bus]:0.}}}});
         for(int c=0;c<2;++c){links.append(QJsonObject{{"output",QString("verb%1:Out").arg(c)},{"input",QString(c==0?"fx:Reverb L":"fx:Reverb R")}});links.append(QJsonObject{{"output",QString("echo%1:Out").arg(c)},{"input",QString(c==0?"fx:Delay L":"fx:Delay R")}});}

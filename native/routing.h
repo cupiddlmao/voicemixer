@@ -37,6 +37,8 @@ private:
     QQueue<Command> commands;
     QSet<QString> queued,links;
     QHash<QString,int> nodeIds;
+    QHash<QString,qint64> nodeSerials;
+    QHash<QString,QPair<qint64,QJsonArray>> lastParameters;
     QHash<int,QString> sinkBySerial;
     QSet<int> hardwareSinkIds;
     QList<Port> ports;

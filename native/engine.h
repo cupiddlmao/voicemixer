@@ -10,13 +10,14 @@
 #include "routing_settings.h"
 #include "recorder.h"
 class RoutingMatrix;
+class PluginRacks;
 
 struct Device { QString name, description; bool input; QStringList channels; };
 struct HardwareSettings {
     QString mic, channel="MONO";
     double threshold=-42, attack=5, release=180, compression=0;
     double colorX=.5, colorY=.5, gain=0;
-    bool denoise=true, bypass=false, mute=false;
+    bool denoise=true, bypass=false, mute=false, positionPanel=false;
     QJsonObject json() const;
     void load(const QJsonObject&);
 };
@@ -32,6 +33,7 @@ struct Settings : HardwareSettings {
     double auxGain=0;
     bool broadcast=true, busMute=false;
     bool auxMute=false, auxA1=true;
+    std::array<bool,8> pluginRacks{};
     RoutingSettings routing;
     RecorderSettings tape;
     QJsonObject json() const;
@@ -45,6 +47,7 @@ public:
     Settings settings;
     std::unique_ptr<RoutingMatrix> matrix;
     std::unique_ptr<Recorder> recorder;
+    std::unique_ptr<PluginRacks> plugins;
     QList<Device> devices;
     QString message="Connecting to PipeWire…";
     bool running=false, monitoring=false, connected=false;
@@ -65,7 +68,7 @@ public:
     void shutdown();
     QJsonObject graphConfiguration()const{return configuration();}
 private:
-    QTimer refreshTimer, applyTimer;
+    QTimer refreshTimer, applyTimer, saveTimer;
     QProcess discovery, control, busControl, meter, auxControl, auxMeter;
     QByteArray meterBuffer;
     QByteArray auxMeterBuffer;
