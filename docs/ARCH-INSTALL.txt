@@ -1,4 +1,4 @@
-LINUX MIXER 0.4.0 — ARCH LINUX SETUP
+LINUX MIXER 0.4.1 — ARCH LINUX SETUP
 
 For a current Arch Linux x86_64 desktop with PipeWire/WirePlumber.
 Internet access and an account with sudo access are needed for dependencies.
@@ -9,7 +9,7 @@ one-click prebuilt Arch installer.
 1. EXTRACT THE ZIP
 
 Extract the entire ZIP into a new folder using your file manager. Keep PKGBUILD
-and linux-mixer-0.4.0-source.tar.gz together. You do not need to extract that
+and linux-mixer-0.4.1-source.tar.gz together. You do not need to extract that
 inner source archive yourself. Open a terminal in the folder containing PKGBUILD
 (often right-click the folder background -> Open Terminal Here).
 

@@ -11,6 +11,7 @@
 #include "recorder.h"
 class RoutingMatrix;
 class PluginRacks;
+class AudioHealth;
 
 struct Device { QString name, description; bool input; QStringList channels; };
 struct HardwareSettings {
@@ -48,6 +49,7 @@ public:
     std::unique_ptr<RoutingMatrix> matrix;
     std::unique_ptr<Recorder> recorder;
     std::unique_ptr<PluginRacks> plugins;
+    std::unique_ptr<AudioHealth> health;
     QList<Device> devices;
     QString message="Connecting to PipeWire…";
     bool running=false, monitoring=false, connected=false;

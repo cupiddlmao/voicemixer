@@ -9,7 +9,7 @@ import sys
 import tarfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.4.0'
+VERSION='0.4.1'
 parser=argparse.ArgumentParser()
 parser.add_argument('--source-only',action='store_true')
 args=parser.parse_args()

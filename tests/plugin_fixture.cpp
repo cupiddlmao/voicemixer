@@ -3,11 +3,16 @@
 class TestGain final : public juce::AudioProcessor {
     juce::AudioParameterFloat* gain;
 public:
-    TestGain():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)){
+    TestGain():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Aux",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)){
         addParameter(gain=new juce::AudioParameterFloat("gain","Gain",0.f,1.f,.5f));
     }
     void prepareToPlay(double,int)override{} void releaseResources()override{}
-    void processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer&)override{b.applyGain(*gain);}
+    void processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer&)override{
+        // The host must allocate and silence the unconnected auxiliary bus.
+        if(b.getNumChannels()<4){b.clear();return;}
+        for(int c=2;c<4;++c)for(int n=0;n<b.getNumSamples();++n)if(b.getSample(c,n)!=0){b.clear();return;}
+        b.applyGain(*gain);
+    }
     bool isBusesLayoutSupported(const BusesLayout& b)const override{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
     const juce::String getName()const override{return "Mixer Test Gain";}
     bool acceptsMidi()const override{return false;}bool producesMidi()const override{return false;}double getTailLengthSeconds()const override{return 0;}

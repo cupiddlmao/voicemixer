@@ -7,6 +7,8 @@
 class QPainter;
 class QTimer;
 class QDialog;
+class QApplication;
+class UpdateChecker;
 void styleMixerDialog(QDialog&);
 class Console : public QWidget {
 public:
@@ -25,9 +27,11 @@ protected:
     void wheelEvent(QWheelEvent*) override;
     void contextMenuEvent(QContextMenuEvent*) override;
 private:
+    friend void runHealthUiTest(QApplication&,Console&);
     Engine& e;
+    std::unique_ptr<UpdateChecker> updates;
     enum Action { None, Mic, Output, Start, Menu, Comp, Gate, Denoise, Bypass,
-                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono };
+                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono, Health };
     struct Hit {QRectF rect;Action action;QString tip;int first=-1,second=-1;};
     std::vector<Hit> hits;
     Action dragging=None;
@@ -44,6 +48,7 @@ private:
     void chooseDevice(bool input,int bus=0);
     void applications(int input=-1);
     void options();
+    void audioHealth();
     void recorderOptions();
     void busOptions(int);
     void fxOptions(int);

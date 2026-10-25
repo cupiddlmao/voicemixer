@@ -1,0 +1,3 @@
+#!/bin/sh
+# Keep the friendly command beside the installed mixer executable.
+exec "$(dirname -- "$0")/linux-mixer" "$@"

@@ -81,8 +81,12 @@ def controls(name, values):
 
 
 def play(target, frequencies):
+    private = bool(os.environ.get('LINUX_MIXER_NO_SESSION_MANAGER'))
+    name = f'{PREFIX}.player{len(processes)}'
+    properties = 'node.dont-fallback=true state.restore-props=false state.restore-target=false state.default-volume=1.0'
+    if private:properties += f' node.autoconnect=false node.name={name}'
     p = spawn(['pw-play', '--raw', '--target', target, '--rate', '48000',
-               '--channels', str(len(frequencies)), '--format', 'f32', '--properties', 'node.dont-fallback=true state.restore-props=false state.restore-target=false state.default-volume=1.0', '-'],
+               '--channels', str(len(frequencies)), '--format', 'f32', '--properties', properties, '-'],
               stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     samples = array.array('f', (.03 * math.sin(2 * math.pi * f * t / 48000)
                               for t in range(48000) for f in frequencies)).tobytes()
@@ -100,23 +104,27 @@ def play(target, frequencies):
             except (BrokenPipeError, OSError):
                 pass
     threading.Thread(target=feed, daemon=True).start()
+    if private:
+        wait_for(lambda:(node(name) or {}).get('info',{}).get('n-output-ports',0)>=len(frequencies), 'private player ports')
+        for c in ('FL','FR')[:len(frequencies)]:connect(name,c,target,c)
 
 
 def capture(bus, physical=False):
     name = f'{PREFIX}.recorder'
     target = '0' if physical else f'{PREFIX}.' + ('microphone' if bus == 5 else f'b{bus-4}')
     prop = f'node.dont-fallback=true node.name={name}'
-    if physical:
+    private = bool(os.environ.get('LINUX_MIXER_NO_SESSION_MANAGER'))
+    if physical or private:
         prop += ' node.autoconnect=false'
     p = spawn(['pw-record', '--raw', '--target', target, '--properties', prop,
                '--rate', '48000', '--channels', '2', '--format', 'f32', '--latency', '256', '-'],
               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     selector = selectors.DefaultSelector()
     try:
-        if physical:
-            wait_for(lambda: node(name), 'silent hardware-bus reader')
+        if physical or private:
+            wait_for(lambda:(node(name) or {}).get('info',{}).get('n-input-ports',0)>=2, 'private reader ports')
             for c in ('FL', 'FR'):
-                connect(f'{PREFIX}.bus{bus}.output', c, name, c)
+                connect(f'{PREFIX}.bus{bus}.output' if physical else target, c, name, c)
         selector.register(p.stdout, selectors.EVENT_READ)
         data = bytearray()
         end = time.monotonic() + 4

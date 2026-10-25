@@ -13,9 +13,28 @@ QString pluginNodeName(int i){return QString("linux_mixer.plugins.input%1").arg(
 QString PluginRacks::folder(int i)const{return stateRoot()+QString("/plugin-racks/input%1").arg(i);}
 QString PluginRacks::executable()const{const QString p=QCoreApplication::applicationDirPath()+"/linux-mixer-plugin-host";return QFileInfo::exists(p)?p:QString{};}
 PluginRacks::PluginRacks(Engine& e):QObject(&e),engine(e){
+    watchdog.setInterval(1000);
+    connect(&watchdog,&QTimer::timeout,this,[this]{
+        if(closing||!active)return;
+        for(int i=0;i<8;++i){
+            if(hosts[i].state()!=QProcess::Running||failed[i]||!progress[i].isValid())continue;
+            QFile file(folder(i)+"/heartbeat.json");
+            if(file.open(QIODevice::ReadOnly)){
+                const auto bytes=file.read(4096);const auto obj=QJsonDocument::fromJson(bytes).object();
+                if(obj.value("pid").toInteger()==hosts[i].processId()&&bytes!=heartbeat[i]){heartbeat[i]=bytes;progress[i].restart();}
+            }
+            // Allow a longer first load (especially Wine), but never leave a hung
+            // GUI or audio callback inserted indefinitely. No automatic crash loop.
+            QFile busyFile(folder(i)+"/busy.json");bool busy=false;
+            if(busyFile.open(QIODevice::ReadOnly))busy=QJsonDocument::fromJson(busyFile.read(4096)).object().value("pid").toInteger()==hosts[i].processId();
+            if(progress[i].elapsed()>((heartbeat[i].isEmpty()||busy)?60000:15000)){
+                hung[i]=true;failed[i]=true;hosts[i].kill();
+            }
+        }
+    });watchdog.start();
     for(int i=0;i<8;++i){
         connect(&hosts[i],&QProcess::finished,this,[this,i](int code,QProcess::ExitStatus status){
-            if(!closing&&active&&engine.settings.pluginRacks[i]){failed[i]=true;engine.message=status==QProcess::CrashExit||code!=0?"Plugin rack crashed; normal input routing restored. Reopen Plugins to retry.":"Plugin rack closed; normal input routing restored";if(engine.changed)engine.changed();}
+            if(!closing&&active&&engine.settings.pluginRacks[i]){failed[i]=true;engine.message=hung[i]?"Plugin rack stopped responding; normal input routing restored. Reopen Plugins to retry.":status==QProcess::CrashExit||code!=0?"Plugin rack crashed; normal input routing restored. Reopen Plugins to retry.":"Plugin rack closed; normal input routing restored";if(engine.changed)engine.changed();}
             QTimer::singleShot(0,&engine,[this]{if(!closing)engine.refresh();});
         });
         connect(&hosts[i],&QProcess::errorOccurred,this,[this,i](QProcess::ProcessError error){if(error==QProcess::FailedToStart){failed[i]=true;engine.message="Cannot start plugin host: "+hosts[i].errorString();if(engine.changed)engine.changed();}});
@@ -26,7 +45,9 @@ bool PluginRacks::running(int i)const{return active&&engine.settings.pluginRacks
 void PluginRacks::launch(int i,bool background){
     if(hosts[i].state()!=QProcess::NotRunning)return;
     const auto exe=executable();if(exe.isEmpty()){failed[i]=true;engine.message="Plugin hosting was not built. Rebuild with BUILD_PLUGIN_HOST=ON.";if(engine.changed)engine.changed();return;}
-    QDir().mkpath(folder(i));QFile::remove(folder(i)+"/quit.request");QFile::remove(folder(i)+"/show.request");
+    hung[i]=false;visible[i]=!background;heartbeat[i].clear();progress[i].start();
+    QDir().mkpath(folder(i));QFile::remove(folder(i)+"/busy.json");QFile::remove(folder(i)+"/heartbeat.json");QFile::remove(folder(i)+"/hide.request");QFile::remove(folder(i)+"/visibility.json");
+    const QString log=folder(i)+"/host.log";if(QFileInfo(log).size()>2*1024*1024){QFile::remove(log+".previous");QFile::rename(log,log+".previous");}QFile::remove(folder(i)+"/quit.request");QFile::remove(folder(i)+"/show.request");
     QStringList args{folder(i),pluginNodeName(i),i<5?QString("Hardware input %1").arg(i+1):QStringList{"System","Music","AUX"}[i-5]};if(background)args<<"--background";
     auto environment=QProcessEnvironment::systemEnvironment();
     QString bridge=QDir::homePath()+"/.local/share/yabridge";
@@ -49,7 +70,19 @@ void PluginRacks::open(int i){
     if(!active){engine.message="Start the audio engine before opening input plugins";if(engine.changed)engine.changed();return;}
     if(executable().isEmpty()){engine.message="Plugin host is missing; rebuild with BUILD_PLUGIN_HOST=ON";if(engine.changed)engine.changed();return;}
     engine.settings.pluginRacks[i]=true;engine.save();failed[i]=false;
-    if(hosts[i].state()!=QProcess::NotRunning){QFile f(folder(i)+"/show.request");if(f.open(QIODevice::WriteOnly))f.write("show");}
+    if(hosts[i].state()!=QProcess::NotRunning){
+        const QString show=folder(i)+"/show.request",hide=folder(i)+"/hide.request";
+        // Use the worker's actual state after native X / Escape / Hide, but
+        // preserve our pending intent for clicks faster than its event timer.
+        if(!QFile::exists(show)&&!QFile::exists(hide)){
+            QFile state(folder(i)+"/visibility.json");if(state.open(QIODevice::ReadOnly)){
+                const auto value=QJsonDocument::fromJson(state.read(4096)).object();
+                if(value.value("pid").toInteger()==hosts[i].processId())visible[i]=value.value("visible").toBool();
+            }
+        }
+        visible[i]=!visible[i];QFile::remove(visible[i]?hide:show);
+        QFile request(visible[i]?show:hide);if(request.open(QIODevice::WriteOnly))request.write(visible[i]?"show":"hide");
+    }
     else launch(i,false);
 }
 void PluginRacks::sync(bool enabled){
@@ -58,7 +91,7 @@ void PluginRacks::sync(bool enabled){
 }
 void PluginRacks::shutdown(){
     if(closing)return;
-    closing=true;active=false;
+    closing=true;active=false;watchdog.stop();
     for(int i=0;i<8;++i)if(hosts[i].state()!=QProcess::NotRunning){QFile f(folder(i)+"/quit.request");if(f.open(QIODevice::WriteOnly))f.write("quit");}
     for(auto& host:hosts)if(host.state()!=QProcess::NotRunning&&!host.waitForFinished(1500)){host.terminate();if(!host.waitForFinished(500)){host.kill();host.waitForFinished(500);}}
 }

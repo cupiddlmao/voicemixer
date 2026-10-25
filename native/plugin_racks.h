@@ -2,6 +2,8 @@
 #include <QtCore/QObject>
 #include <QtCore/QProcess>
 #include <array>
+#include <QtCore/QTimer>
+#include <QtCore/QElapsedTimer>
 class Engine;
 class PluginRacks : public QObject {
 public:
@@ -16,7 +18,10 @@ public:
 private:
     Engine& engine;
     std::array<QProcess,8> hosts;
-    std::array<bool,8> failed{};
+    std::array<bool,8> failed{},hung{},visible{};
+    std::array<QElapsedTimer,8> progress;
+    std::array<QByteArray,8> heartbeat;
+    QTimer watchdog;
     bool active=false,closing=false;
     QString folder(int input) const;
     QString executable() const;

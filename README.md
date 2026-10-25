@@ -174,8 +174,8 @@ SDK files and unrelated user files are excluded.
   source archive. Your friend runs `makepkg -si` there to build and install an
   Arch-native `.pkg.tar.zst`. This recipe is prepared but has not been executed
   on Arch yet. The official LADSPA package is `zam-plugins-ladspa`.
-- **Gentoo/KDE**: download the Gentoo ZIP from the 0.3.2 release, extract it and
-  open `INSTALL.txt`. It includes the matching 0.3.2 source, dependency/USE
+- **Gentoo/KDE**: download the Gentoo ZIP from the current release, extract it and
+  open `INSTALL.txt`. It includes the matching source, dependency/USE
   requirements, PipeWire checks and a per-user build/install helper. It is a
   manual source installation, not a prebuilt binary or Portage ebuild, and has
   not been tested on Gentoo. Generate it with `python3 packaging/gentoo/bundle.py`
@@ -278,3 +278,17 @@ plugins use Wine and yabridge. See [plugin setup and limitations](docs/PLUGINS.m
 
 Install the new version over the old one to keep your settings. Quit the controller
 first and back up the profile. See [upgrade instructions](docs/UPDATING.md).
+
+## Audio health and update checks
+
+**Menu → Audio health** shows live buffer timing, audio processing load and
+PipeWire node error counts. Hung control commands time out; unresponsive plugin
+workers fall back to normal input routing. See [stability details](docs/STABILITY.md).
+
+**Menu → Check for updates** checks GitHub release information. Startup checks
+are optional and off by default. Preview releases can be included. Downloads
+and installation stay manual; the checker never transfers release ZIPs.
+See [updating without losing settings](docs/UPDATING.md).
+
+After installation, run `voicemixer` in a terminal to open the mixer. It also
+accepts the same options as `linux-mixer`, such as `voicemixer --background`.

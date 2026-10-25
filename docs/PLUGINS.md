@@ -78,6 +78,41 @@ may depend on Wine and the desktop, so the host-side controls are preferred.
 A local opt-in test (`verify-wider-controls`) checks real Windows Wider DSP at
 0%, 100%, and 200%, and confirms saved-state restoration. No mic is recorded.
 
+## Auto-Tune Pro controls on Linux
+
+For Auto-Tune Pro, **Open editor** opens Voicemixer's native control panel for
+Retune Speed, Flex-Tune, Humanize, Natural Vibrato, Tracking, formant/throat,
+transpose, detune, vibrato rate, mix, input type, key, scale, correction mode,
+Classic DSP, formant correction and bypass. The panel controls the actual
+installed plugin; it does not replace its pitch-correction engine. Existing rack
+settings are retained. The scale selector follows the Modern/Classic DSP switch.
+
+**Plugin UI** still opens Antares' original editor, which may stall under Wine.
+Graph editing requires that original editor. **Parameters** exposes the remaining
+plugin parameters. Native controls autosave normally; only the original editor
+defers automatic saves while it is visible.
+
+The opt-in `verify-autotune-controls` test uses a separately installed real plugin
+and synthetic audio. It checks pointer dragging, parameter updates, key and scale
+selection, external updates, and saved-state restoration. It does not record a mic.
+Build it with `cmake --build build --target verify-autotune-controls`, then run it
+with the Linux wrapper path and an output PNG path as its two arguments. Pointer
+injection is enabled only with `VOICEMIXER_PRIVATE_POINTER_TEST=1` and should only
+be used on a private test display.
+
 A local `plugin-runtime.json` beside settings.json may specify `binDirectory`,
 `bridgeDirectory`, `WINELOADER`, and `WINESERVER` to pin audio plugins to a
 compatible runtime without changing the system Wine installation.
+
+Enabled racks load audio processing in the background at startup without creating
+a rack window. The window is created only when you click **Plugins**.
+
+Click **Plugins** again to hide or reopen the same rack without bypassing its
+effects. The rack also has a **Hide rack** button. Closing its window keeps
+processing active; right-clicking the strip’s Plugins button bypasses the rack.
+
+Unconnected auxiliary plugin inputs receive silence while the main stereo pair
+is processed. Auxiliary outputs are not routed to separate mixer buses. Plugins
+with more than 16 total internal channels are rejected.
+
+Original plugin editors defer automatic state snapshots while visible to avoid blocking their controls. Close the editor window to save changes promptly; quitting Voicemixer also saves the rack. A crash while the original editor is open can lose changes made since its last save.

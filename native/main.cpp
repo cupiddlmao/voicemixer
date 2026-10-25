@@ -16,6 +16,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QFile>
+void runHealthUiTest(QApplication&,Console&);
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
 void runPositionTest(QApplication&,Engine&,Console&);
@@ -51,8 +52,9 @@ static void setDesktopMaximized(Console& window,bool maximize) {
 
 int main(int argc,char** argv) {
     QApplication app(argc,argv);app.setApplicationName("Linux Mixer");app.setOrganizationName("PersonalAudio");
-    app.setStyle("Fusion");
+    app.setApplicationVersion(VOICEMIXER_VERSION);app.setStyle("Fusion");
     const auto args=app.arguments();
+    if(args.contains("--version")){QTextStream(stdout)<<"Voicemixer "<<app.applicationVersion()<<"\n";return 0;}
     if(args.contains("--recorder-test")){runRecorderTest(app);return app.exec();}
     if(args.contains("--write-matrix")){
         const int at=args.indexOf("--write-matrix");if(at+1>=args.size())return 2;
@@ -85,7 +87,7 @@ int main(int argc,char** argv) {
         }return 0;
     }
     Console window(engine);Console& console=window;
-    const bool testing=(args.contains("--position-test")||args.contains("--live-controls-test")||args.contains("--plugin-routing-test"))||args.contains("--smoke-test")||args.contains("--app-routing-test")||args.contains("--screenshot");
+    const bool testing=args.contains("--health-ui-test")||(args.contains("--position-test")||args.contains("--live-controls-test")||args.contains("--plugin-routing-test"))||args.contains("--smoke-test")||args.contains("--app-routing-test")||args.contains("--screenshot");
     QSystemTrayIcon tray;QMenu trayMenu;
     QPixmap icon(64,64);icon.fill(QColor("#20333d"));{QPainter p(&icon);p.setPen(QPen(QColor("#7aceaa"),5));for(int i=0;i<3;++i){p.drawLine(16+i*16,10,16+i*16,54);p.drawEllipse(QPoint(16+i*16,24+i*9),5,5);}}
     app.setWindowIcon(QIcon(icon));tray.setIcon(QIcon(icon));tray.setToolTip("Linux Mixer · audio and app routing running");
@@ -102,9 +104,9 @@ int main(int argc,char** argv) {
         QFile file(autostart);if(file.open(QIODevice::WriteOnly))file.write(("[Desktop Entry]\nType=Application\nName=Linux Mixer\nExec=\""+exe+"\" --background\nTerminal=false\n").toUtf8());
         else {login->setChecked(false);engine.message="Could not save login startup entry";}
     });
-    trayMenu.addSeparator();trayMenu.addAction("Quit and stop audio",&window,[&]{engine.stop();app.quit();});
+    trayMenu.addSeparator();trayMenu.addAction("Quit and stop audio",&window,[&]{engine.stop();window.closeToBackground={};app.quit();});
     tray.setContextMenu(&trayMenu);QObject::connect(&tray,&QSystemTrayIcon::activated,&window,[&](QSystemTrayIcon::ActivationReason reason){if(reason==QSystemTrayIcon::Trigger||reason==QSystemTrayIcon::DoubleClick)showWindow();});
-    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
+    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();window.closeToBackground={};app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
     if(!testing){app.setQuitOnLastWindowClosed(false);window.closeToBackground=[&]{window.hide();};tray.show();reopen.start();}
 
     window.setDesktopMaximized=[&window](bool maximize){setDesktopMaximized(window,maximize);};
@@ -115,6 +117,7 @@ int main(int argc,char** argv) {
     }
     if((args.contains("--position-test")||args.contains("--live-controls-test")||args.contains("--plugin-routing-test")) || args.contains("--window-size") || args.contains("--smoke-test") || args.contains("--app-routing-test"))window.show();
     else if(!args.contains("--background"))setDesktopMaximized(window,true);
+    if(args.contains("--health-ui-test"))runHealthUiTest(app,console);
     if(args.contains("--plugin-routing-test"))runPluginRoutingTest(app,engine,console);
     if(args.contains("--position-test"))runPositionTest(app,engine,console);
     if(args.contains("--live-controls-test"))runLiveControlsTest(app,engine,console);

@@ -1,3 +1,5 @@
+#include "audio_health.h"
+#include "update_checker.h"
 #include "console.h"
 #include <QtGui/QCloseEvent>
 #include <QtWidgets/QApplication>
@@ -92,6 +94,7 @@ void styleMixerDialog(QDialog& dialog){
 }
 Console::Console(Engine& engine):e(engine) {
     setWindowTitle("Linux Mixer · Potato console");resize(1480,720);setMinimumSize(900,430);setMouseTracking(true);
+    updates=std::make_unique<UpdateChecker>(this);updates->changed=[this]{update();};
     auto* frameTimer=new QTimer(this);frameTimer->setSingleShot(true);frameTimer->setInterval(16);connect(frameTimer,&QTimer::timeout,this,[this]{update();});
     e.changed=[frameTimer]{if(!frameTimer->isActive())frameTimer->start();};transportTimer=new QTimer(this);transportTimer->setInterval(180);connect(transportTimer,&QTimer::timeout,this,[this]{e.recorder->seek(e.recorder->position+transportDirection*2);});
 }
@@ -111,14 +114,15 @@ void Console::paintEvent(QPaintEvent*) {
     button(p,{895,7,186,23},"Applications",false,true,9);add({895,7,186,23},Apps,"Assign running apps to System, Music or AUX; choices are remembered");
     button(p,{1100,7,90,23},e.running?"ENGINE ON":"START",e.running,true,8);add({1100,7,90,23},Start,"Start or restart the audio engine with the selected microphone");
     button(p,{1199,7,134,23},"48 000 Hz  ·  STEREO",false,false,8);
-    button(p,{1345,7,122,23},"Menu",false,true,9);add({1345,7,122,23},Menu,"Presets, gate timing, stop engine and quit");
+    button(p,{1345,7,122,23},updates->update.version.isEmpty()?"Menu":"Menu · Update",false,true,9);add({1345,7,122,23},Menu,"Presets, gate timing, stop engine and quit");
     p.setPen(QPen(line,.8));p.drawLine(QPointF(7,38),QPointF(1471,38));
     for(int i=0;i<8;++i)strip(p,i,i<5);
     masters(p);
     p.fillRect(QRectF(7,688,1465,24),dark);
     p.setBrush(e.running?green:coral);p.setPen(Qt::NoPen);p.drawEllipse(QPointF(19,700),3,3);
     text(p,{30,688,1100,24},QFontMetrics(QFont("DejaVu Sans",9)).elidedText(e.message,Qt::ElideRight,1090),9,e.running?ink:QColor("#e0bc9e"));
-    text(p,{1155,688,304,24},"Gate / RNNoise / Color / Routing",8,dim,Qt::AlignRight|Qt::AlignVCenter);
+    QString healthText="Audio health…";if(e.health->available)healthText=QString("Audio health · %1 errors").arg(e.health->errors);
+    text(p,{1155,688,304,24},healthText,8,e.health->errors?coral:dim,Qt::AlignRight|Qt::AlignVCenter);add({1155,688,304,24},Health,"Audio buffer timing, processing load, node errors and plugin recovery");
 }
 void Console::strip(QPainter& p,int index,bool hardware) {
     const double x=8+index*129;const bool live=hardware,virtualInput=!hardware,usable=true;const int vi=index-5;const auto& s=e.settings.hardware(hardware?index:0);const auto& routing=e.settings.routing;
@@ -165,7 +169,7 @@ void Console::strip(QPainter& p,int index,bool hardware) {
         button(p,{x+64,340,49,29},"Bypass",live && s.bypass,live,7);
         if(live){add({x+9,340,49,29},Denoise,"Toggle RNNoise noise suppression live",index);add({x+64,340,49,29},Bypass,"Bypass denoise, gate, compressor and color. Fader and mute stay active.",index);}
     }
-    button(p,{x+9,376,54,21},e.plugins->hasFailed(index)?"FX error":"Plugins",e.plugins->running(index),true,7);add({x+9,376,54,21},Plugins,"Open this input’s VST3/LADSPA plugin rack; right-click to bypass the rack (Windows VST3 via yabridge)",index);
+    button(p,{x+9,376,54,21},e.plugins->hasFailed(index)?"FX error":"Plugins",e.plugins->running(index),true,7);add({x+9,376,54,21},Plugins,"Show or hide this input’s VST3/LADSPA plugin rack without stopping effects; right-click to bypass the rack (Windows VST3 via yabridge)",index);
     text(p,{x+66,376,48,21},"FX sends",7,dim,Qt::AlignCenter);
     for(int k=0;k<3;++k){const double value=k==0?routing.reverbSend[index]:k==1?routing.fxAmount[index]:routing.delaySend[index];knob(p,{x+25+k*35,415},13,value,QString::number(value*100,'f',0),true);add({x+11+k*35,401,28,28},FxSend,k==0?"Reverb send (%)":k==1?"FX send level (%)":"Delay send (%)",index,k);}
     text(p,{x+5,433,116,12},"Reverb      FX level      Delay",6,dim,Qt::AlignCenter);
@@ -291,9 +295,10 @@ void Console::options(){
     m.addSeparator();
     m.addAction("Save preset…",this,[this]{e.exportPreset(QFileDialog::getSaveFileName(this,"Save mixer preset",{},"Mixer preset (*.json)"));});
     m.addAction("Load preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Load mixer preset",{},"Mixer preset (*.json)");if(!f.isEmpty())e.importPreset(f);});
+    m.addSeparator();m.addAction("Audio health…",this,[this]{audioHealth();});m.addAction("Check for updates…",this,[this]{updates->showDialog(this);});
     m.addSeparator();m.addAction("Restart audio engine",this,[this]{e.start();});m.addAction("Stop audio engine",this,[this]{e.stop();});
     m.addSeparator();m.addAction("Hide mixer (keep routing in background)",this,[this]{window()->close();});
-    m.addAction("Quit mixer and stop audio",this,[this]{e.stop();QApplication::quit();});
+    m.addAction("Quit mixer and stop audio",this,[this]{e.stop();closeToBackground={};QApplication::quit();});
     m.exec(QCursor::pos());
 }
 void Console::activate(Action a,const QPointF& pos,int first,int second) {
@@ -317,6 +322,7 @@ void Console::activate(Action a,const QPointF& pos,int first,int second) {
     case Mic:chooseDevice(true,std::max(0,first));break;
     case Output:chooseDevice(false,std::max(0,first));break;
     case Menu:options();break;
+    case Health:audioHealth();break;
     case Apps:applications(first);break;
     case Start:e.start();break;
     case Denoise:hw.denoise=!hw.denoise;e.apply();break;

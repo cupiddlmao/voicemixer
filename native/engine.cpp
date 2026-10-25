@@ -1,3 +1,5 @@
+#include "audio_health.h"
+#include "process_guard.h"
 #include "paths.h"
 #include "engine.h"
 #include "routing.h"
@@ -64,6 +66,8 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
     QDir().mkpath(runtime);
     QFile saved(root+"/settings.json");
     if(saved.open(QIODevice::ReadOnly)) settings.load(QJsonDocument::fromJson(saved.readAll()).object());
+    health=std::make_unique<AudioHealth>(this);health->changed=[this]{notify();};
+    guardCommand(discovery);guardCommand(control);guardCommand(busControl);guardCommand(auxControl);
     plugins=std::make_unique<PluginRacks>(*this);
     matrix=std::make_unique<RoutingMatrix>(*this);
     recorder=std::make_unique<Recorder>(settings.tape,[this]{std::array<RecorderSource,5> result;for(int i=0;i<5;++i)result[i]={settings.hardware(i).mic,settings.hardware(i).channel};return result;},this);
@@ -90,6 +94,7 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
                 if(channels.empty()){const auto raw=p.value("audio.position").toString();QString clean=raw;clean.remove(QRegularExpression("[\\[\\]\"]"));channels=clean.split(QRegularExpression("[,\\s]+"),Qt::SkipEmptyParts);}
                 devices.push_back({name,p.value("node.description").toString(name),kind=="Audio/Source",channels});}
         }
+        QStringList relevant{settings.mic};for(const auto& hw:settings.extra)relevant<<hw.mic;for(const auto& out:settings.routing.outputs)relevant<<out;health->setRelevantNodes(relevant);
         connected=true; running=sourceId>=0 || (settings.mic.isEmpty() && ownedPid("engine")>0 && std::all_of(settings.extra.begin(),settings.extra.end(),[](const auto& hw){return hw.mic.isEmpty();})) || std::any_of(extraCapture.begin(),extraCapture.end(),[](int id){return id>=0;}); monitoring=ownedPid("monitor")>0;
         auxRunning=auxId>=0;
         if(auxStarting){
@@ -148,11 +153,11 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
     refreshTimer.setInterval(1800); connect(&refreshTimer,&QTimer::timeout,this,[this]{refresh();});refreshTimer.start();
     saveTimer.setSingleShot(true);saveTimer.setInterval(300);connect(&saveTimer,&QTimer::timeout,this,[this]{save();});
     applyTimer.setSingleShot(true);applyTimer.setInterval(20);connect(&applyTimer,&QTimer::timeout,this,[this]{sendControls();});
-    QTimer::singleShot(0,this,[this]{refresh();});
+    QTimer::singleShot(0,this,[this]{refresh();health->start();});
 }
 Engine::~Engine() {shutdown();}
 void Engine::shutdown(){
-    plugins->shutdown();recorder->shutdown();save();refreshTimer.stop();applyTimer.stop();saveTimer.stop();
+    health->stop();plugins->shutdown();recorder->shutdown();save();refreshTimer.stop();applyTimer.stop();saveTimer.stop();
     for(auto& p:extraControls)if(p&&p->state()!=QProcess::NotRunning)p->waitForFinished(1000);
     for(auto& p:extraMeters)if(p&&p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(500);}
     if(control.state()!=QProcess::NotRunning)control.waitForFinished(1000);
@@ -270,7 +275,7 @@ void Engine::sendControls(){
     matrix->apply();
     for(int index=0;index<5;++index){
     const auto& hw=settings.hardware(index);const int id=index==0?captureId:extraCapture[index-1];if(id<0)continue;
-    if(index>0 && !extraControls[index-1]){extraControls[index-1]=std::make_unique<QProcess>();connect(extraControls[index-1].get(),&QProcess::finished,this,[this]{if(pending){pending=false;applyTimer.start();}});}
+    if(index>0 && !extraControls[index-1]){extraControls[index-1]=std::make_unique<QProcess>();guardCommand(*extraControls[index-1]);connect(extraControls[index-1].get(),&QProcess::finished,this,[this]{if(pending){pending=false;applyTimer.start();}});}
     auto& target=index==0?control:*extraControls[index-1];
     if(target.state()!=QProcess::NotRunning){pending=true;continue;}
     QJsonArray parameters;

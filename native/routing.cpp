@@ -1,3 +1,4 @@
+#include "process_guard.h"
 #include "paths.h"
 #include "routing.h"
 #include "hardware_links.h"
@@ -18,6 +19,7 @@
 
 static QString edge(int out,int in){return QString::number(out)+":"+QString::number(in);}
 RoutingMatrix::RoutingMatrix(Engine& e):QObject(&e),engine(e),runtime(stateRoot()+"/.runtime"){
+    guardCommand(worker);guardCommand(appQuery);
     connect(&worker,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){
         const auto error=QString::fromUtf8(worker.readAllStandardError()).trimmed();
         if(code!=0)lastParameters.clear();
