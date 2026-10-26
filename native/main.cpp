@@ -16,6 +16,8 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QFile>
+int runProfileTests();
+int runProfileFlow();
 void runHealthUiTest(QApplication&,Console&);
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
@@ -54,6 +56,8 @@ int main(int argc,char** argv) {
     QApplication app(argc,argv);app.setApplicationName("Linux Mixer");app.setOrganizationName("PersonalAudio");
     app.setApplicationVersion(VOICEMIXER_VERSION);app.setStyle("Fusion");
     const auto args=app.arguments();
+    if(args.contains("--profile-test"))return runProfileTests();
+    if(args.contains("--profile-flow-test"))return runProfileFlow();
     if(args.contains("--version")){QTextStream(stdout)<<"Voicemixer "<<app.applicationVersion()<<"\n";return 0;}
     if(args.contains("--recorder-test")){runRecorderTest(app);return app.exec();}
     if(args.contains("--write-matrix")){

@@ -310,15 +310,3 @@ void Engine::setMonitor(bool enabled){
     matrix->setRoute(0,0,enabled);monitoring=enabled && matrix->ready;
     notify();
 }
-void Engine::exportPreset(const QString& path){if(!path.isEmpty()){message=writeJson(path,settings.json())?"Preset saved":"Could not save preset";notify();}}
-void Engine::importPreset(const QString& path){
-    if(recorder->recording||recorder->finalizing){message="Stop recording before loading a preset";notify();return;}
-    QFile f(path);if(!f.open(QIODevice::ReadOnly)){message="Could not read preset";notify();return;}
-    QJsonParseError error;auto doc=QJsonDocument::fromJson(f.readAll(),&error);
-    if(error.error!=QJsonParseError::NoError || !doc.isObject() || (doc.object().value("version").toInt()!=1 && doc.object().value("version").toInt()!=2 && doc.object().value("version").toInt()!=3)){message="Invalid mixer preset";notify();return;}
-    const auto previous=settings;const auto oldMic=settings.mic,oldSink=settings.sink;const auto oldOutputs=settings.routing.outputs;settings.load(doc.object());
-    settings.engineEnabled=previous.engineEnabled;
-    if(running){for(int i=0;i<5;++i){settings.hardware(i).mic=previous.hardware(i).mic;settings.hardware(i).channel=previous.hardware(i).channel;}settings.mic=oldMic;settings.sink=oldSink;settings.routing.outputs=oldOutputs;message="Preset loaded; current audio devices kept";}
-    const bool topologyChanged=previous.routing.busComposite!=settings.routing.busComposite || previous.routing.busCompositePost!=settings.routing.busCompositePost || previous.routing.compositePatch!=settings.routing.compositePatch;
-    recorder->configure();matrix->rulesChanged();if(running&&topologyChanged)start();apply();notify();
-}

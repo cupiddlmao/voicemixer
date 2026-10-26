@@ -56,6 +56,10 @@ configuration of open-source processors, not VoiceMeeter's algorithms.
 - **Recovery**: reconnect selected physical sources and output links after they
   return; restart crashed mixer-owned processes with bounded retry intervals.
   A stopped engine stays stopped. Settings and presets persist.
+- **Complete profile backup/restore** bundles mixer settings, plugin chains and
+  saved plugin states into one JSON file. Restore reviews missing devices and
+  plugins, supports device remapping, and keeps a rollback backup. Existing JSON
+  presets remain supported. See [profile instructions](docs/PROFILES.md).
 
 The virtual EQs, recorder, reverb/delay and master balance/mono controls are
 functional in version 0.3. The recorder follows the documented tape workflow;

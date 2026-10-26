@@ -293,8 +293,8 @@ void Console::options(){
     m.addAction("Gate attack / release…",this,[this]{timing();});
     m.addAction("Reset color panel",this,[this]{e.settings.colorX=e.settings.colorY=.5;e.apply();});
     m.addSeparator();
-    m.addAction("Save preset…",this,[this]{e.exportPreset(QFileDialog::getSaveFileName(this,"Save mixer preset",{},"Mixer preset (*.json)"));});
-    m.addAction("Load preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Load mixer preset",{},"Mixer preset (*.json)");if(!f.isEmpty())e.importPreset(f);});
+    m.addAction("Back up complete profile…",this,[this]{e.exportPreset(QFileDialog::getSaveFileName(this,"Back up complete mixer profile",{},"Mixer profile / legacy preset (*.json)"));});
+    m.addAction("Restore profile / preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Restore mixer profile / preset",{},"Mixer profile / legacy preset (*.json)");if(!f.isEmpty())e.importPreset(f);});
     m.addSeparator();m.addAction("Audio health…",this,[this]{audioHealth();});m.addAction("Check for updates…",this,[this]{updates->showDialog(this);});
     m.addSeparator();m.addAction("Restart audio engine",this,[this]{e.start();});m.addAction("Stop audio engine",this,[this]{e.stop();});
     m.addSeparator();m.addAction("Hide mixer (keep routing in background)",this,[this]{window()->close();});

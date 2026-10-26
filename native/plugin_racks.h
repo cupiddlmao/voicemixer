@@ -15,6 +15,9 @@ public:
     bool running(int input) const;
     qint64 processId(int input) const{return hosts.at(input).processId();}
     bool hasFailed(int input) const{return failed.at(input);}
+    bool snapshot(QString& error);
+    bool pauseForProfile(QString& error);
+    void resumeAfterProfile();
 private:
     Engine& engine;
     std::array<QProcess,8> hosts;
@@ -22,7 +25,7 @@ private:
     std::array<QElapsedTimer,8> progress;
     std::array<QByteArray,8> heartbeat;
     QTimer watchdog;
-    bool active=false,closing=false;
+    bool active=false,closing=false,profilePaused=false;
     QString folder(int input) const;
     QString executable() const;
     void launch(int input,bool background);
