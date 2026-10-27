@@ -56,12 +56,13 @@ void run(LADSPA_Handle h,unsigned long count){
             s.ports[2][i]=std::clamp(l*s.reduction,-ceiling,ceiling);s.ports[3][i]=std::clamp(r*s.reduction,-ceiling,ceiling);
         }
     }else{
-        const float feedback=.35f+.58f*std::clamp(control(s,6,.5),0.f,1.f),damping=std::clamp(control(s,7,.35),0.f,.98f);
-        const float echoFeedback=std::clamp(control(s,9,.3),0.f,.85f);
+        s.ramps[3].set(std::clamp(control(s,6,.5),0.f,1.f),rampFrames);s.ramps[4].set(std::clamp(control(s,7,.35),0.f,.98f),rampFrames);
+        s.ramps[5].set(std::clamp(control(s,9,.3),0.f,.85f),rampFrames);
         s.ramps[0].set(std::clamp(control(s,8,350),1.f,2000.f),rampFrames);
         s.ramps[1].set(std::clamp(control(s,10,1),0.f,4.f),rampFrames);s.ramps[2].set(std::clamp(control(s,11,1),0.f,4.f),rampFrames);
         const unsigned capacity=s.echo[0].size();
         for(unsigned long i=0;i<count;++i){const auto delay=std::clamp(unsigned(s.ramps[0].tick()*s.rate/1000),1u,capacity-1);const auto read=(s.echoPosition+capacity-delay)%capacity;const float reverbGain=s.ramps[1].tick(),delayGain=s.ramps[2].tick();
+            const float feedback=.35f+.58f*s.ramps[3].tick(),damping=s.ramps[4].tick(),echoFeedback=s.ramps[5].tick();
             for(int channel=0;channel<2;++channel){const float input=finite(s.ports[channel][i]);float sum=0;
                 for(int k=0;k<4;++k){auto& line=s.comb[channel*4+k];const float delayed=line.samples[line.position];line.damped=delayed*(1-damping)+line.damped*damping;if(std::abs(line.damped)<1e-20f)line.damped=0;line.samples[line.position]=std::clamp(input*.25f+line.damped*feedback,-32.f,32.f);if(++line.position==line.samples.size())line.position=0;sum+=delayed;}
                 const float echo=s.echo[channel][read];s.echo[channel][s.echoPosition]=std::clamp(finite(s.ports[2+channel][i])+echo*echoFeedback,-32.f,32.f);
