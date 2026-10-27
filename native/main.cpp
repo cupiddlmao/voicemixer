@@ -2,6 +2,7 @@
 #include "hardware_links.h"
 #include "engine.h"
 #include "console.h"
+#include "control_commands.h"
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QSystemTrayIcon>
 #include <QtWidgets/QMenu>
@@ -18,6 +19,7 @@
 #include <QtCore/QFile>
 int runProfileTests();
 int runProfileFlow();
+int runControlTests();
 void runHealthUiTest(QApplication&,Console&);
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
@@ -58,6 +60,7 @@ int main(int argc,char** argv) {
     const auto args=app.arguments();
     if(args.contains("--profile-test"))return runProfileTests();
     if(args.contains("--profile-flow-test"))return runProfileFlow();
+    if(args.contains("--control-test"))return runControlTests();
     if(args.contains("--version")){QTextStream(stdout)<<"Voicemixer "<<app.applicationVersion()<<"\n";return 0;}
     if(args.contains("--recorder-test")){runRecorderTest(app);return app.exec();}
     if(args.contains("--write-matrix")){
@@ -70,6 +73,7 @@ int main(int argc,char** argv) {
     }
     QDir().mkpath(stateRoot()+"/.runtime");
     QLockFile lock(stateRoot()+"/.runtime/gui.lock");
+    if(args.contains("--ctl")){const int at=args.indexOf("--ctl");return sendControlCommand(args.mid(at+1),!lock.tryLock(100),stateRoot()+"/.runtime");}
     if(!lock.tryLock(100)){const bool quit=args.contains("--quit-running")||args.contains("--stop-running");QFile request(stateRoot()+"/.runtime/"+(quit?"quit.request":"show.request"));if(request.open(QIODevice::WriteOnly))request.write(args.contains("--stop-running")?"stop":"request");QTextStream(stdout)<<(quit?"Closing mixer controller.\n":"Opening the running Linux Mixer.\n");return 0;}
     QFile::remove(stateRoot()+"/.runtime/show.request");QFile::remove(stateRoot()+"/.runtime/quit.request");
     if(args.contains("--quit-running")||args.contains("--stop-running"))return 0;
@@ -110,7 +114,7 @@ int main(int argc,char** argv) {
     });
     trayMenu.addSeparator();trayMenu.addAction("Quit and stop audio",&window,[&]{engine.stop();window.closeToBackground={};app.quit();});
     tray.setContextMenu(&trayMenu);QObject::connect(&tray,&QSystemTrayIcon::activated,&window,[&](QSystemTrayIcon::ActivationReason reason){if(reason==QSystemTrayIcon::Trigger||reason==QSystemTrayIcon::DoubleClick)showWindow();});
-    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();window.closeToBackground={};app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
+    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{if(drainControlCommands(stateRoot()+"/.runtime",engine.settings)){engine.apply();engine.save();if(engine.changed)engine.changed();}const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();window.closeToBackground={};app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
     if(!testing){app.setQuitOnLastWindowClosed(false);window.closeToBackground=[&]{window.hide();};tray.show();reopen.start();}
 
     window.setDesktopMaximized=[&window](bool maximize){setDesktopMaximized(window,maximize);};

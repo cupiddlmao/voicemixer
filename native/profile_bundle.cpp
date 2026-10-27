@@ -25,7 +25,7 @@ bool settingsValid(const QJsonObject& settings,QString& error){
     const QStringList booleans{"denoise","bypass","mute","positionPanel","engineEnabled","broadcast","busMute","auxMute","auxA1","busMode","multitrack","playOnLoad","loop","reverbEnabled","delayEnabled"};
     const QStringList numbers{"version","threshold","attack","release","compression","colorX","colorY","gain","busGain","auxGain","bus","channels","bits","rate","kbps","bufferSeconds","preSeconds","stopAfter","room","damping","delayMs","feedback"};
     const QStringList booleanArrays{"pluginRacks","armed","playback","busComposite","busCompositePost","busMono","busMute","inputMute"};
-    const QStringList numericArrays{"hardwarePan","reverbSend","delaySend","fxAmount","reverbReturn","delayReturn","inputGain","busGain","busBalance"};
+    const QStringList numericArrays{"hardwarePan","hardwareDepth","reverbSend","delaySend","fxAmount","reverbReturn","delayReturn","inputGain","busGain","busBalance"};
     std::function<bool(const QJsonObject&)> check=[&](const QJsonObject& object){
         for(auto it=object.begin();it!=object.end();++it){
             const auto key=it.key();const auto value=it.value();
@@ -36,7 +36,7 @@ bool settingsValid(const QJsonObject& settings,QString& error){
                 const auto rules=value.toObject();if(rules.size()>1024)return false;for(auto r=rules.begin();r!=rules.end();++r)if(r.key().size()>1024||!r.value().isDouble()||r.value().toDouble()!=r.value().toInt()||r.value().toInt()<0||r.value().toInt()>2)return false;
             }else if(value.isArray()){
                 const auto a=value.toArray();int expected=8;
-                if(key=="hardwarePan"||key=="outputs")expected=5;
+                if(key=="hardwarePan"||key=="hardwareDepth"||key=="outputs")expected=5;
                 if(key=="inputGain"||key=="inputMute"||key=="eq")expected=3;
                 if(a.size()!=expected)return false;
                 if(key=="routes"||key=="eq"||key=="compositePatch"){
