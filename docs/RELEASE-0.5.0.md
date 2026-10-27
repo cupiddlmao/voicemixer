@@ -12,7 +12,7 @@ Voicemixer 0.5.0 preview adds command-line control, a front/back position cue, c
 ## Downloads
 - **Arch/CachyOS:** `linux-mixer-0.5.0-arch-friend.zip` — matching source, checksummed PKGBUILD, INSTALL.txt and UPDATING.md. Extract and run `makepkg -si` as your normal user.
 - **Gentoo/KDE:** `linux-mixer-0.5.0-gentoo-friend.zip` — source, dependency/PipeWire tutorial and build.sh. Extract to a new folder and run `bash build.sh --install`.
-- **Ubuntu 26.04 amd64:** `linux-mixer-0.5.0-ubuntu26.04-friend.zip` or the `.deb` built here on CachyOS; install with `sudo apt install ./linux-mixer-*.deb`. See the validation notes below.
+- **Ubuntu:** no `.deb` is attached to this release. Build from the source tarball using the README's Ubuntu instructions, or run `python3 packaging/release.py` on Ubuntu 26.04 to produce one.
 - **Other source builds:** `linux-mixer-0.5.0-source.tar.gz` — see README.md.
 - Verify assets using `SHA256SUMS`.
 
@@ -22,4 +22,4 @@ Quit the mixer controller (`linux-mixer --quit-running`; verify it exited) and b
 ## Validation and limits
 Native tests (DSP, profiles, control commands, meter/recorder readers, history, stability/update checks) pass locally. The `--ctl` command, new console text and position cue have been built and checked in offscreen screenshots and unit tests; the position cue and reverb smoothing have not been evaluated by ear beyond the author's own use. The Python/PipeWire/Xvfb checks were not rerun for this release.
 
-The `.deb` is a native package built on CachyOS with that system's Qt, not on Ubuntu 26.04; it has not been installed on Ubuntu. Clean Arch, Gentoo and Ubuntu installations have not been validated. Audio health may show errors on some hardware; it reports PipeWire's counters and is not a count of audible clicks. Standalone PulseAudio is not supported.
+No `.deb` is provided because it must be built on Ubuntu to link the right Qt libraries and this release was built on CachyOS. Clean Arch, Gentoo and Ubuntu installations have not been validated. Audio health may show errors on some hardware; it reports PipeWire's counters and is not a count of audible clicks. Standalone PulseAudio is not supported.
