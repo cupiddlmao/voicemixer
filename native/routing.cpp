@@ -20,6 +20,16 @@
 static QString edge(int out,int in){return QString::number(out)+":"+QString::number(in);}
 RoutingMatrix::RoutingMatrix(Engine& e):QObject(&e),engine(e),runtime(stateRoot()+"/.runtime"){
     guardCommand(worker);guardCommand(appQuery);
+    meterTimer.setInterval(30);connect(&meterTimer,&QTimer::timeout,this,[this]{
+        if(!ready)return;
+        for(int i=0;i<MeterReaders::count;++i){
+            const auto error=meters.takeError(i);if(!error.isEmpty())engine.message="Meter reader stopped: "+error;
+            auto& level=i<3?inputPeak[i]:busPeak[i-3];
+            const double peak=meters.takePeak(i);
+            level=meters.state(i)==QProcess::NotRunning?-90:std::max(20*std::log10(std::max(peak,.0000316228)),level-3.6);
+        }
+        engine.auxPeakDb=inputPeak[2];if(engine.changed)engine.changed();
+    });meterTimer.start();
     connect(&worker,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){
         const auto error=QString::fromUtf8(worker.readAllStandardError()).trimmed();
         if(code!=0)lastParameters.clear();
@@ -135,7 +145,7 @@ void RoutingMatrix::apply(){
     auto set=[this](const QString& node,const QJsonArray& values){const int id=nodeIds.value(node,-1);if(id<0)return;const qint64 serial=nodeSerials.value(node,-1);const auto previous=lastParameters.constFind(node);if(previous!=lastParameters.cend()&&previous->first==serial&&previous->second==values)return;lastParameters.insert(node,{serial,values});queue("pw-cli",{"set-param",QString::number(id),"Props",QString::fromUtf8(QJsonDocument(QJsonObject{{"params",values}}).toJson(QJsonDocument::Compact))});};
     const auto& state=engine.settings.routing;
     for(int i=0;i<3;++i){const double gain=state.inputMute[i]?0:std::pow(10,state.inputGain[i]/20);QJsonArray values{"left:Mult",gain,"right:Mult",gain};for(int c=0;c<2;++c)for(int band=0;band<3;++band){values.append(QString(c==0?"leftEq%1:Gain":"rightEq%1:Gain").arg(band));values.append(state.eq[i][c*3+band]);}set(virtualInputName(i),values);}
-    for(int b=0;b<8;++b){QJsonArray values;for(int i=0;i<8;++i){values.append(QString("left:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.panGain(i,0):0.);values.append(QString("right:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.panGain(i,1):0.);}
+    for(int b=0;b<8;++b){QJsonArray values;for(int i=0;i<8;++i){values.append(QString("left:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.dryGain(i,0):0.);values.append(QString("right:Gain %1").arg(i+1));values.append(state.routes[i][b]?state.dryGain(i,1):0.);}
         const double gain=state.busMute[b]?0:std::pow(10,state.busGain[b]/20);values.append("gainL:Mult");values.append(gain*(1-std::max(0.,state.busBalance[b])));values.append("gainR:Mult");values.append(gain*(1+std::min(0.,state.busBalance[b])));if(state.busComposite[b]){values={};for(int c=0;c<8;++c){values.append(QString("compositeGain%1:Mult").arg(c));values.append(gain);}for(int c=0;c<2;++c){values.append(QString("compositeTape%1:Gain 2").arg(c));values.append(engine.settings.tape.playback[b]?std::pow(10,engine.settings.tape.gain/20):0.);}}
         else {
             for(int effect=0;effect<2;++effect)for(int side=0;side<2;++side)for(int input=0;input<8;++input){values.append(QString(effect==0?"verb%1:Gain %2":"echo%1:Gain %2").arg(side).arg(input+1));values.append(state.routes[input][b]?state.panGain(input,side)*state.fxAmount[input]*(effect==0&&state.reverbEnabled?state.reverbSend[input]:effect==1&&state.delayEnabled?state.delaySend[input]:0.):0.);}
@@ -153,18 +163,11 @@ void RoutingMatrix::setRoute(int input,int bus,bool enabled){
 void RoutingMatrix::setOutput(int bus,const QString& target){if(bus<0||bus>=5)return;engine.settings.routing.outputs[bus]=target;if(bus==0)engine.settings.sink=target;engine.save();if(ready)synchronizeLinks();}
 void RoutingMatrix::startMeters(){
     for(int i=0;i<11;++i){
-        if(meters[i]&&meters[i]->state()!=QProcess::NotRunning)continue;
-        if(!meters[i]){
-            meters[i]=std::make_unique<QProcess>();auto* p=meters[i].get();
-            connect(p,&QProcess::readyReadStandardOutput,this,[this,p,i]{buffers[i]+=p->readAllStandardOutput();const auto bytes=buffers[i].size()/4*4;float peak=0;
-                for(qsizetype pos=0;pos<bytes;pos+=4){float v;std::memcpy(&v,buffers[i].constData()+pos,4);if(std::isfinite(v))peak=std::max(peak,std::abs(v));}buffers[i].remove(0,bytes);
-                auto& level=i<3?inputPeak[i]:busPeak[i-3];level=std::max(20*std::log10(std::max(double(peak),.0000316228)),level-3);engine.auxPeakDb=inputPeak[2];if(engine.changed)engine.changed();});
-            connect(p,&QProcess::finished,this,[this,i]{buffers[i].clear();(i<3?inputPeak[i]:busPeak[i-3])=-90;if(i==2)engine.auxPeakDb=-90;if(engine.changed)engine.changed();});
-        }
+        if(meters.state(i)!=QProcess::NotRunning)continue;
         // Private, explicitly linked readers avoid desktop policy restoring a stale target.
         const QString name=i<3?QString("linux_mixer.meter.input%1").arg(i):QString("linux_mixer.meter.bus%1").arg(i-3);
         const QString properties="node.autoconnect=false node.dont-fallback=true stream.monitor=true state.restore-target=false state.restore-props=false node.name="+name;
-        meters[i]->start("pw-record",{"--raw","--target","0","--properties",properties,"--rate","48000","--channels","2","--format","f32","--latency","1024","-"});
+        meters.startMeter(i,"pw-record",{"--raw","--target","0","--properties",properties,"--rate","48000","--channels","2","--format","f32","--latency","1024","-"});
     }
 }
 void RoutingMatrix::refreshApps(){if(appQuery.state()==QProcess::NotRunning)appQuery.start("pactl",{"-f","json","list","sink-inputs"});}
@@ -198,14 +201,15 @@ void RoutingMatrix::assignApp(const QString& key,int input){
 void RoutingMatrix::stop(){
     stopping=true;ready=false;starting=failed=false;dirty=false;commands.clear();queued.clear();
     if(worker.state()!=QProcess::NotRunning){worker.terminate();worker.waitForFinished(1000);}
-    for(auto& p:meters)if(p&&p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(1000);}
+    meters.stop();inputPeak.fill(-90);busPeak.fill(-90);engine.auxPeakDb=-90;
     const auto pid=ownedPid();if(pid)kill(pid,SIGTERM);QFile::remove(runtime+"/matrix.pid");nodeIds.clear();ports.clear();links.clear();stopping=false;
 }
 void RoutingMatrix::shutdown(){
+    meterTimer.stop();
     QElapsedTimer deadline;deadline.start();
     while((!commands.empty()||worker.state()!=QProcess::NotRunning||dirty)&&deadline.elapsed()<2500){next();if(worker.state()!=QProcess::NotRunning)worker.waitForFinished(100);}
     commands.clear();queued.clear();dirty=false;
     if(worker.state()!=QProcess::NotRunning){worker.waitForFinished(1000);if(worker.state()!=QProcess::NotRunning){worker.terminate();worker.waitForFinished(1000);}}
     if(appQuery.state()!=QProcess::NotRunning){appQuery.terminate();appQuery.waitForFinished(1000);}
-    for(auto& p:meters)if(p&&p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(1000);}
+    meters.stop();inputPeak.fill(-90);busPeak.fill(-90);engine.auxPeakDb=-90;
 }

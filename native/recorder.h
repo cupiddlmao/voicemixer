@@ -8,6 +8,8 @@
 #include <QtCore/QQueue>
 #include <array>
 #include <functional>
+#include "audio_history.h"
+#include "recorder_capture.h"
 struct RecorderSettings {
     QString directory,prefix="Record",format="WAV";
     bool busMode=false,multitrack=false,playOnLoad=false,loop=false;
@@ -37,14 +39,16 @@ public:
 private:
     RecorderSettings& s;std::function<std::array<RecorderSource,5>()> physical;
     QString prefix;
-    QProcess capture,encoder,decoder,player,probe,linker;
+    RecorderCapture capture;
+    QProcess encoder,decoder,player,probe,linker;
     QQueue<QPair<int,int>> linkQueue;
-    QByteArray captureBytes,history,pendingAudio;
-    QElapsedTimer playClock;
-    QTimer clockTimer;
+    QByteArray captureBytes,pendingAudio;
+    AudioHistory history;
+    QElapsedTimer playClock,meterClock;
+    QTimer clockTimer,captureTimer;
     qint64 recordedFrames=0,playedFrames=0;
     int captureCount=16,outputChannels=2;
-    bool configuredBus=false,decoderPending=false,playLinksReady=false,closing=false,failedRecord=false,changingCapture=false,active=true;
+    bool configuredBus=false,decoderPending=false,playLinksReady=false,closing=false,failedRecord=false,active=true;
     double playStart=0;
     void notify();void startCapture();void receive();void feed(const QByteArray&);
     void flushRecording();

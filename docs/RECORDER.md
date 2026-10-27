@@ -42,11 +42,19 @@ https://voicemeeter.com/user-guide-recording-with-the-integrated-recorder/
 - **Target folder and prefix**: automatic date/time filenames are generated when
   REC is pressed. Existing files are not overwritten. The Linux default folder
   is `Documents/Linux Mixer`, rather than the Windows Documents/Voicemeeter path.
-- **Pre-record buffer**: 20 seconds are retained in memory by default, with a
-  10–60 second allocation option. Select 0 seconds to append none, or a duration
-  up to the allocation to prepend that recent audio when recording starts.
+- **Pre-record buffer**: the buffer limit defaults to 20 seconds, adjustable
+  from 10–60 seconds. Only the selected pre-record duration is retained in a
+  circular buffer. Select 0 seconds to disable history, or a duration up to the
+  limit to prepend that recent audio when recording starts.
   The buffer runs only while the controller and audio engine are active. Nothing
   is written to disk until REC is pressed. Stop engine stops this capture too.
+  Capture uses its own 2048-frame capture buffer; this does not set the live
+  microphone/headphone buffer or add a recorder insert to those audio paths.
+  A separate reader thread drains the capture pipe during UI stalls. Its queue
+  holds up to two seconds of complete audio frames. If the controller falls
+  behind further during recording, recording stops with an error rather than
+  silently dropping samples. With recording stopped, obsolete queued audio is
+  discarded and the input meter catches up.
 - **Play on load**, **Loop**, **Playback gain**, and **Stop recording after
   duration** are saved options. A duration of 00:00:00 disables automatic stop.
   Record-pause time is excluded from the recorded duration.
@@ -67,6 +75,10 @@ bus audio and silence on an unselected bus. No physical audio devices are used.
 ```bash
 QT_QPA_PLATFORM=offscreen ./build/linux-mixer --recorder-test
 ```
+
+For a separate PipeWire daemon with no desktop/device connections, use
+`python3 tests/verify_recorder_private.py`. This also supplies the DSP ports and
+explicit stream links normally created by the desktop session manager.
 
 This reproduces the documented recorder workflow using native Linux routing and
 FFmpeg. It does not use VB-Audio's proprietary recorder/codec implementation or

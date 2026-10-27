@@ -38,6 +38,13 @@ A third-party plugin can still block inside its own state API; operation timings
 are recorded in its host log for diagnosis.
 Previous large host logs are rotated on the next launch.
 
+The three virtual-input meters and eight bus meters share a separate I/O thread.
+Their capture pipes keep draining while the interface is busy. The thread keeps
+only each meter's latest peak, and the interface samples those peaks every 30 ms;
+it does not replay a backlog of old meter audio after a UI stall. These readers
+are visual taps and do not process the audible input/output path. Their raw
+PipeWire error counters are still included in audio-health diagnostics.
+
 For crackling, check whether the session error counts rise at the same time,
 which input/bus is affected, the driver buffer timing, and whether bypassing a
 plugin helps. These diagnostics make faults visible; they cannot guarantee that
@@ -45,7 +52,9 @@ a particular plugin or audio device will never underrun.
 
 ## Developer checks
 
-`ctest --test-dir build --output-on-failure` checks DSP, release selection,
+`ctest --test-dir build --output-on-failure` checks DSP, recorder history wraparound,
+capture pipe draining without the GUI event loop, bounded overflow reporting,
+capture process failure/cancellation, release selection,
 update failure/size handling, statistics parsing and command timeouts.
 
 `python tests/verify_stability_private.py` requires Xvfb and runs a separate

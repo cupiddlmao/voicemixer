@@ -33,11 +33,13 @@ void RecorderSettings::load(const QJsonObject& o){
 }
 QString mediaTool(const QString& name){const QString executable=QStandardPaths::findExecutable(name);if(!executable.isEmpty())return executable;const auto local=QCoreApplication::applicationDirPath()+"/../.deps/ffmpeg/usr/bin/"+name;return QFileInfo::exists(local)?local:QString{};}
 Recorder::Recorder(RecorderSettings& settings,std::function<std::array<RecorderSource,5>()> sources,QObject* parent,QString name):QObject(parent),s(settings),physical(std::move(sources)),prefix(std::move(name)){
-    if(qEnvironmentVariableIsSet("LINUX_MIXER_DEBUG_TAPE")){int id=0;for(auto* process:{&capture,&encoder,&decoder,&player,&probe,&linker}){process->setObjectName(QStringList{"capture","encoder","decoder","player","probe","linker"}[id++]);connect(process,&QProcess::stateChanged,this,[this,process](QProcess::ProcessState state){qInfo("Tape %s state=%d playing=%d paused=%d pending=%d loops=%d pos=%.3f",qPrintable(process->objectName()),int(state),playing,playPaused,decoderPending,completedPlays,position);});}}
+    if(qEnvironmentVariableIsSet("LINUX_MIXER_DEBUG_TAPE")){int id=0;for(auto* process:{&encoder,&decoder,&player,&probe,&linker}){process->setObjectName(QStringList{"encoder","decoder","player","probe","linker"}[id++]);connect(process,&QProcess::stateChanged,this,[this,process](QProcess::ProcessState state){qInfo("Tape %s state=%d playing=%d paused=%d pending=%d loops=%d pos=%.3f",qPrintable(process->objectName()),int(state),playing,playPaused,decoderPending,completedPlays,position);});}}
     if(s.directory.isEmpty())s.directory=QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)+"/Linux Mixer";
-    connect(&capture,&QProcess::readyReadStandardOutput,this,[this]{receive();});
-    connect(&capture,&QProcess::started,this,[this]{QTimer::singleShot(100,this,[this]{if(needGraph)needGraph();});});
-    connect(&capture,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){if(code&&!closing&&!changingCapture){error="Recorder input stopped: "+QString::fromUtf8(capture.readAllStandardError()).trimmed();notify();}});
+    captureTimer.setInterval(10);connect(&captureTimer,&QTimer::timeout,this,[this]{
+        const auto failure=capture.takeError();
+        if(!failure.isEmpty()&&!closing){error="Recorder input stopped: "+failure;if(recording){failedRecord=true;stop();}notify();}
+        receive();
+    });captureTimer.start();
     connect(&encoder,&QProcess::bytesWritten,this,[this]{flushRecording();});
     connect(&encoder,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){finishRecording(code);});
     connect(&encoder,&QProcess::errorOccurred,this,[this](QProcess::ProcessError e){if(e==QProcess::FailedToStart){failedRecord=true;error="Cannot launch FFmpeg encoder";recording=finalizing=false;notify();}});
@@ -71,7 +73,10 @@ void Recorder::nextLink(){
 void Recorder::startCapture(){
     if(capture.state()!=QProcess::NotRunning)return;
     inputReady=false;captureCount=s.busMode?8:16;configuredBus=s.busMode;captureBytes.clear();history.clear();QStringList map;for(int i=0;i<captureCount;++i)map<<QString("AUX%1").arg(i);
-    capture.start("pw-record",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true node.always-process=true state.restore-props=false node.name="+prefix+".recorder.capture", "--rate","48000","--channels",QString::number(captureCount),"--channel-map",map.join(','),"--format","f32","--latency","512","-"});
+    // This is a monitoring consumer, outside the live input/output path. Give
+    // its 16-channel pipe enough buffering without forcing a smaller quantum.
+    capture.startProcess("pw-record",{"--raw","--target","0","--properties","node.autoconnect=false node.dont-fallback=true node.always-process=true state.restore-props=false node.name="+prefix+".recorder.capture", "--rate","48000","--channels",QString::number(captureCount),"--channel-map",map.join(','),"--format","f32","--latency","2048","-"},captureCount);
+    QTimer::singleShot(100,this,[this]{if(!closing&&needGraph)needGraph();});
 }
 void Recorder::consume(const QJsonArray& graph){
     if(closing||!active)return;
@@ -92,8 +97,10 @@ void Recorder::consume(const QJsonArray& graph){
             else for(int c=0;c<2;++c)link(port(virtualInputName(i-5,prefix),c==0?"FL":"FR","output"),port(target,QString("AUX%1").arg(i*2+c),"input"));}
     }
     // Remove only obsolete links terminating at this recorder's private capture.
+    // Detached pw-link runs without blocking the UI thread; the next refresh
+    // re-derives stale links, so a failed or ignored unlink is retried for free.
     for(const auto& out:ports)if(out.dir=="output")for(const auto& in:ports)if(in.node==nodes.value(target,-1)&&in.dir=="input"){
-        auto key=QString::number(out.id)+":"+QString::number(in.id);if(existing.contains(key)&&!desired.contains(key)){QProcess unlink;unlink.start("pw-link",{"-d",QString::number(out.id),QString::number(in.id)});unlink.waitForFinished(200);}}
+        auto key=QString::number(out.id)+":"+QString::number(in.id);if(existing.contains(key)&&!desired.contains(key)){QProcess::startDetached("pw-link",{"-d",QString::number(out.id),QString::number(in.id)});}}
     int capturePorts=0;for(const auto& in:ports)if(in.node==nodes.value(target,-1)&&in.dir=="input")++capturePorts;
     inputReady=capturePorts==captureCount;for(const auto& edge:desired)inputReady=inputReady&&existing.contains(edge);
     const bool playerExists=nodes.contains(prefix+".recorder.player");
@@ -105,25 +112,32 @@ void Recorder::consume(const QJsonArray& graph){
 void Recorder::setActive(bool value){
     if(active==value)return;
     active=value;if(active){if(needGraph)needGraph();return;}
-    stop();inputReady=false;changingCapture=true;if(capture.state()!=QProcess::NotRunning){capture.terminate();if(!capture.waitForFinished(1000)){capture.kill();capture.waitForFinished(500);}}changingCapture=false;history.clear();captureBytes.clear();linkQueue.clear();
+    stop();inputReady=false;capture.stop();history.clear();captureBytes.clear();linkQueue.clear();
 }
 void Recorder::configure(){
     if(recording||finalizing){error="Stop recording before changing recording options";notify();return;}
-    if(capture.state()!=QProcess::NotRunning){changingCapture=true;capture.terminate();capture.waitForFinished(1000);changingCapture=false;}
+    capture.stop();
     linkQueue.clear();if(linker.state()!=QProcess::NotRunning){linker.kill();linker.waitForFinished(500);}
     error.clear();
     inputReady=false;history.clear();captureBytes.clear();if(needGraph)needGraph();notify();
 }
 void Recorder::receive(){
-    captureBytes+=capture.readAllStandardOutput();const qsizetype frameBytes=captureCount*4,frames=captureBytes.size()/frameBytes;if(!frames)return;
+    if(capture.takeOverflow()){
+        captureBytes.clear();history.clear();
+        if(recording){failedRecord=true;error="Recorder could not keep up with a UI stall; recording stopped to prevent silent data loss";stop();notify();}
+    }
+    captureBytes+=capture.takeAudio();const qsizetype frameBytes=captureCount*4,frames=captureBytes.size()/frameBytes;if(!frames)return;
     const int channels=s.busMode?std::clamp(s.channels,1,8):2;QByteArray audio(frames*channels*4,Qt::Uninitialized);float peakValue=0;
     auto sample=[&](qsizetype frame,int channel){float v;std::memcpy(&v,captureBytes.constData()+(frame*captureCount+channel)*4,4);return std::isfinite(v)?v:0.f;};
     for(qsizetype f=0;f<frames;++f)for(int c=0;c<channels;++c){float v=0;if(s.busMode)v=channels==1?(sample(f,0)+sample(f,1))*.5f:sample(f,c);else for(int i=0;i<8;++i)if(s.armed[i]){if(i<5)v+=(sample(f,i*2)+sample(f,i*2+1))*.5f;else v+=sample(f,i*2+c);}
         peakValue=std::max(peakValue,std::abs(v));quint32 bits;std::memcpy(&bits,&v,4);qToLittleEndian(bits,reinterpret_cast<uchar*>(audio.data()+(f*channels+c)*4));}
     captureBytes.remove(0,frames*frameBytes);peak=std::max(20*std::log10(std::max(double(peakValue),.0000316228)),peak-3);
-    const qsizetype limit=qsizetype(s.bufferSeconds)*48000*channels*4;history+=audio;if(history.size()>limit)history.remove(0,history.size()-limit);
+    // No history is needed when pre-record is off. Keep only the requested
+    // duration in a ring when enabled, rather than moving a 20-second buffer
+    // on every capture callback on the UI thread.
+    history.setCapacity(std::llround(s.preSeconds*48000)*channels*4);history.append(audio);
     if(recording&&!recordPaused)feed(audio);
-    notify();
+    if(!meterClock.isValid()||meterClock.elapsed()>=100){meterClock.start();notify();}
 }
 void Recorder::feed(const QByteArray& audio){
     if(encoder.state()==QProcess::NotRunning||audio.isEmpty())return;
@@ -157,7 +171,7 @@ void Recorder::record(){
     if(s.multitrack)for(int c=0;c<outputChannels;++c){args<<"-map"<<"0:a:0"<<"-af"<<QString("pan=mono|c0=c%1").arg(c);output(base+QString("_Track%1.").arg(c+1)+extension);}
     error.clear();pendingAudio.clear();failedRecord=false;recordedFrames=0;recordPaused=false;recording=true;position=0;
     encoder.start(ffmpeg,args);if(!encoder.waitForStarted(1500)){recording=false;error="Cannot start audio encoder";notify();return;}
-    const qsizetype wanted=std::min<qsizetype>(history.size(),std::llround(s.preSeconds*48000)*outputChannels*4);if(wanted)feed(history.right(wanted));notify();
+    const auto preRoll=history.tail(std::llround(s.preSeconds*48000)*outputChannels*4);if(!preRoll.isEmpty())feed(preRoll);notify();
 }
 void Recorder::finishRecording(int code){
     if(!recording&&!finalizing)return;
@@ -205,9 +219,10 @@ void Recorder::seek(double seconds){if(recording||finalizing)return;const bool r
 void Recorder::eject(){if(recording||finalizing)return;stopPlayback();file.clear();position=duration=0;notify();}
 void Recorder::shutdown(){
     if(closing)return;
-    closing=true;linkQueue.clear();clockTimer.stop();stop();
+    closing=true;linkQueue.clear();clockTimer.stop();captureTimer.stop();stop();
     QElapsedTimer drain;drain.start();while(!pendingAudio.isEmpty()&&drain.elapsed()<10000){flushRecording();encoder.waitForBytesWritten(100);}
     flushRecording();
     if(encoder.state()!=QProcess::NotRunning&&!encoder.waitForFinished(10000)){encoder.kill();encoder.waitForFinished(1000);}
-    for(auto* p:{&capture,&probe,&linker})if(p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(1000);}
+    capture.stop();
+    for(auto* p:{&probe,&linker})if(p->state()!=QProcess::NotRunning){p->terminate();p->waitForFinished(1000);}
 }

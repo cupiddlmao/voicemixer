@@ -56,6 +56,10 @@ configuration of open-source processors, not VoiceMeeter's algorithms.
 - **Recovery**: reconnect selected physical sources and output links after they
   return; restart crashed mixer-owned processes with bounded retry intervals.
   A stopped engine stays stopped. Settings and presets persist.
+- **Complete profile backup/restore** bundles mixer settings, plugin chains and
+  saved plugin states into one JSON file. Restore reviews missing devices and
+  plugins, supports device remapping, and keeps a rollback backup. Existing JSON
+  presets remain supported. See [profile instructions](docs/PROFILES.md).
 
 The virtual EQs, recorder, reverb/delay and master balance/mono controls are
 functional in version 0.3. The recorder follows the documented tape workflow;
@@ -77,6 +81,23 @@ mix. Master BALANCE and stereo/mono buttons work on ordinary stereo buses.
 The Normal mode button opens the eight-channel Composite patch used for separate
 channel recording. Its pre/post selection determines whether strip processing is
 included. A mode/patch change restarts audio; ordinary knob changes do not.
+
+## Command-line control
+
+While the mixer is running, another terminal (or a desktop shortcut) can change it:
+
+```bash
+linux-mixer --ctl mute mic1 toggle     # on | off | toggle (default toggle)
+linux-mixer --ctl gain mic2 -6.5       # dB, limited to -60..+12
+linux-mixer --ctl mute music on
+linux-mixer --ctl gain b1 -3
+linux-mixer --ctl bypass mic3 on       # also: denoise
+```
+
+Targets are `mic1`–`mic5`, `system`, `music`, `aux`, `a1`–`a5` and `b1`–`b3`.
+`bypass` and `denoise` apply to mics only. The command exits 2 for invalid input
+and 1 if no mixer is running. The running mixer picks commands up within about a
+second, which makes this suitable for KDE/GNOME/Hyprland keybindings on Wayland.
 
 ## Use
 
@@ -108,8 +129,10 @@ adds brightness, up adds presence. Double-click a pad to center it or a fader to
 reset it to 0 dB. Bypass retains fader/mute while skipping the effects.
 
 Right-click any hardware Color Panel to switch to its **Position L/R** pad.
-Drag left/right to position that input in ordinary stereo bus mixes; double-click
-to center it. Right-click again to return to Color Panel. Color and position are
+Drag left/right to pan that input in ordinary stereo bus mixes and up/down to move it
+front (up to +3 dB, closer) or back (down to −9 dB, so its reverb/delay sends stand out and
+it sounds further away); this is a stereo distance cue, not true surround. Double-click
+to center both. Right-click again to return to Color Panel. Color and position are
 stored independently, so switching views keeps both settings. Position also
 applies to that strip's reverb/delay sends. Pre-fader recordings and Composite
 channel patches remain independent of this stereo bus positioning.

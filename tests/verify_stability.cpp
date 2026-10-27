@@ -44,10 +44,10 @@ public:
 int main(int argc,char** argv){
     QCoreApplication app(argc,argv);QTemporaryDir profile;assert(profile.isValid());qputenv("LINUX_MIXER_STATE_DIR",profile.path().toUtf8());
     QString error;
-    const auto releases=QJsonDocument(QJsonArray{release("v0.3.2"),release("v0.5.0",true),release("v0.4.1"),release("v9.0.0",false,true)}).toJson();
+    const auto releases=QJsonDocument(QJsonArray{release("v0.3.2"),release("v0.6.0",true),release("v0.4.1"),release("v9.0.0",false,true)}).toJson();
     assert(newestUpdate(releases,"0.4.0",false,&error).version=="0.4.1");assert(error.isEmpty());
-    assert(newestUpdate(releases,"0.4.0",true).version=="0.5.0");
-    assert(newestUpdate(releases,"0.5.0",true).version.isEmpty());
+    assert(newestUpdate(releases,"0.4.0",true).version=="0.6.0");
+    assert(newestUpdate(releases,"0.6.0",true).version.isEmpty());
     assert(newestUpdate("not json","0.4.0",true,&error).version.isEmpty()&&!error.isEmpty());
     assert(newestUpdate("{}","0.4.0",true,&error).version.isEmpty()&&!error.isEmpty());
     for(const auto& bad:{release("v99.0.0",false,false,"https://evil.example/file"),release("v99.0.0",false,false,"https://github.com/other/repo/releases/tag/v99.0.0"),release("v99.0.0",false,false,"http://github.com/cupiddlmao/voicemixer/releases/tag/v99.0.0"),release("v1.0.0.exe"),release("v1.0.0-rc1")})assert(newestUpdate(QJsonDocument(QJsonArray{bad}).toJson(),"0.4.0",true).url.isEmpty());
@@ -55,11 +55,11 @@ int main(int argc,char** argv){
     Transport transport;
     {
         UpdateChecker checker(nullptr,&transport);assert(transport.requests==0); // No default network request.
-        transport.body=releases;checker.check();checker.check();assert(transport.requests==1);waitUntil([&]{return !checker.busy;});assert(checker.update.version=="0.5.0");
+        transport.body=releases;checker.check();checker.check();assert(transport.requests==1);waitUntil([&]{return !checker.busy;});assert(checker.update.version=="0.6.0");
         transport.body="{}";checker.check();waitUntil([&]{return !checker.busy;});assert(checker.update.url.isEmpty()&&checker.status.contains("invalid"));
         transport.code=403;checker.check();waitUntil([&]{return !checker.busy;});assert(checker.status.contains("request limit"));
         transport.code=200;transport.body=QByteArray(300*1024,'x');checker.check();waitUntil([&]{return !checker.busy;});assert(checker.status.contains("size limit"));
-        transport.body=releases;checker.check();waitUntil([&]{return !checker.busy;});assert(checker.update.version=="0.5.0"); // Recover after failure.
+        transport.body=releases;checker.check();waitUntil([&]{return !checker.busy;});assert(checker.update.version=="0.6.0"); // Recover after failure.
     }
     const QByteArray header="S   ID  QUANT   RATE    WAIT    BUSY   W/Q   B/Q  ERR FORMAT           NAME \n";
     const QByteArray lines="R  714    512  48000   1.3ms   2.2us  0.12  0.00   83    S16LE 1 48000 alsa_input.usb-Mic\nR  547      0  48000  14.3us  88.4us  0.00  0.01    0                   + linux_mixer.plugins.input0\n";

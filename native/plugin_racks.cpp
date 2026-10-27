@@ -9,13 +9,18 @@
 #include <QtCore/QProcessEnvironment>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
+#include <QtCore/QSaveFile>
+#include <QtCore/QUuid>
+#include <QtCore/QEventLoop>
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QProgressDialog>
 QString pluginNodeName(int i){return QString("linux_mixer.plugins.input%1").arg(i);}
 QString PluginRacks::folder(int i)const{return stateRoot()+QString("/plugin-racks/input%1").arg(i);}
 QString PluginRacks::executable()const{const QString p=QCoreApplication::applicationDirPath()+"/linux-mixer-plugin-host";return QFileInfo::exists(p)?p:QString{};}
 PluginRacks::PluginRacks(Engine& e):QObject(&e),engine(e){
     watchdog.setInterval(1000);
     connect(&watchdog,&QTimer::timeout,this,[this]{
-        if(closing||!active)return;
+        if(closing||!active||profilePaused)return;
         for(int i=0;i<8;++i){
             if(hosts[i].state()!=QProcess::Running||failed[i]||!progress[i].isValid())continue;
             QFile file(folder(i)+"/heartbeat.json");
@@ -34,7 +39,7 @@ PluginRacks::PluginRacks(Engine& e):QObject(&e),engine(e){
     });watchdog.start();
     for(int i=0;i<8;++i){
         connect(&hosts[i],&QProcess::finished,this,[this,i](int code,QProcess::ExitStatus status){
-            if(!closing&&active&&engine.settings.pluginRacks[i]){failed[i]=true;engine.message=hung[i]?"Plugin rack stopped responding; normal input routing restored. Reopen Plugins to retry.":status==QProcess::CrashExit||code!=0?"Plugin rack crashed; normal input routing restored. Reopen Plugins to retry.":"Plugin rack closed; normal input routing restored";if(engine.changed)engine.changed();}
+            if(!closing&&!profilePaused&&active&&engine.settings.pluginRacks[i]){failed[i]=true;engine.message=hung[i]?"Plugin rack stopped responding; normal input routing restored. Reopen Plugins to retry.":status==QProcess::CrashExit||code!=0?"Plugin rack crashed; normal input routing restored. Reopen Plugins to retry.":"Plugin rack closed; normal input routing restored";if(engine.changed)engine.changed();}
             QTimer::singleShot(0,&engine,[this]{if(!closing)engine.refresh();});
         });
         connect(&hosts[i],&QProcess::errorOccurred,this,[this,i](QProcess::ProcessError error){if(error==QProcess::FailedToStart){failed[i]=true;engine.message="Cannot start plugin host: "+hosts[i].errorString();if(engine.changed)engine.changed();}});
@@ -66,7 +71,7 @@ void PluginRacks::launch(int i,bool background){
     QTimer::singleShot(600,&engine,[this]{if(!closing)engine.refresh();});
 }
 void PluginRacks::open(int i){
-    if(i<0||i>7)return;
+    if(i<0||i>7||profilePaused)return;
     if(!active){engine.message="Start the audio engine before opening input plugins";if(engine.changed)engine.changed();return;}
     if(executable().isEmpty()){engine.message="Plugin host is missing; rebuild with BUILD_PLUGIN_HOST=ON";if(engine.changed)engine.changed();return;}
     engine.settings.pluginRacks[i]=true;engine.save();failed[i]=false;
@@ -86,7 +91,7 @@ void PluginRacks::open(int i){
     else launch(i,false);
 }
 void PluginRacks::sync(bool enabled){
-    active=enabled;if(closing)return;
+    active=enabled;if(closing||profilePaused)return;
     for(int i=0;i<8;++i){if(active&&engine.settings.pluginRacks[i]&&!failed[i])launch(i,true);else if(hosts[i].state()!=QProcess::NotRunning){QFile f(folder(i)+"/quit.request");if(f.open(QIODevice::WriteOnly))f.write("quit");}}
 }
 void PluginRacks::shutdown(){
@@ -95,3 +100,45 @@ void PluginRacks::shutdown(){
     for(int i=0;i<8;++i)if(hosts[i].state()!=QProcess::NotRunning){QFile f(folder(i)+"/quit.request");if(f.open(QIODevice::WriteOnly))f.write("quit");}
     for(auto& host:hosts)if(host.state()!=QProcess::NotRunning&&!host.waitForFinished(1500)){host.terminate();if(!host.waitForFinished(500)){host.kill();host.waitForFinished(500);}}
 }
+
+namespace {
+bool profileWait(const QString& label,const std::function<bool()>& completed,QString& error){
+    QEventLoop loop;QElapsedTimer deadline;deadline.start();bool done=false;
+    QProgressDialog progress(label,"Cancel",0,0,QApplication::activeWindow());progress.setWindowModality(Qt::ApplicationModal);progress.setMinimumDuration(300);
+    QTimer poll;poll.setInterval(50);
+    QObject::connect(&poll,&QTimer::timeout,&loop,[&]{
+        if(completed()){done=error.isEmpty();loop.quit();}
+        else if(deadline.elapsed()>15000){error="Plugin operation timed out; no profile was applied";loop.quit();}
+    });
+    QObject::connect(&progress,&QProgressDialog::canceled,&loop,[&]{error="Profile operation canceled";loop.quit();});
+    poll.start();loop.exec();return done;
+}
+}
+bool PluginRacks::snapshot(QString& error){
+    error.clear();const QString token=QUuid::createUuid().toString(QUuid::Id128);QList<int> pending;
+    for(int i=0;i<8;++i)if(hosts[i].state()!=QProcess::NotRunning){
+        pending.append(i);QSaveFile request(folder(i)+"/save.request");
+        if(!request.open(QIODevice::WriteOnly)||request.write(token.toUtf8())<0||!request.commit()){error="Cannot request a fresh plugin snapshot";return false;}
+    }
+    if(pending.isEmpty())return true;
+    return profileWait("Saving current plugin states…",[&]{
+        bool all=true;
+        for(int i:pending){
+            if(hosts[i].state()==QProcess::NotRunning){error="Plugin rack closed before its state was saved";return true;}
+            QFile reply(folder(i)+"/save.reply.json");
+            if(!reply.open(QIODevice::ReadOnly)){all=false;continue;}
+            const auto ack=QJsonDocument::fromJson(reply.read(4096)).object();
+            if(ack.value("token").toString()!=token||ack.value("pid").toInteger()!=hosts[i].processId()){all=false;continue;}
+            if(!ack.value("ok").toBool()){error="Plugin rack could not save its state";return true;}
+        }return all;
+    },error);
+}
+bool PluginRacks::pauseForProfile(QString& error){
+    error.clear();profilePaused=true;
+    for(int i=0;i<8;++i)if(hosts[i].state()!=QProcess::NotRunning){QSaveFile request(folder(i)+"/quit.request");if(!request.open(QIODevice::WriteOnly)||request.write("quit")<0||!request.commit()){error="Cannot pause plugin rack for restore";resumeAfterProfile();return false;}}
+    bool idle=true;for(auto& host:hosts)idle=idle&&host.state()==QProcess::NotRunning;
+    if(idle)return true;
+    const bool ok=profileWait("Pausing plugin racks for restore…",[&]{for(auto& host:hosts)if(host.state()!=QProcess::NotRunning)return false;return true;},error);
+    if(!ok){for(int i=0;i<8;++i)QFile::remove(folder(i)+"/quit.request");resumeAfterProfile();}return ok;
+}
+void PluginRacks::resumeAfterProfile(){profilePaused=false;failed.fill(false);hung.fill(false);sync(active);}

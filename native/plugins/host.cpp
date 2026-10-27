@@ -37,7 +37,7 @@ public:
     std::atomic<uint64_t> callbacks{0};uint64_t lastCallbacks=0,heartbeatSequence=0;int stalledTicks=0;
     TextButton hideButton{"Hide rack"};
     TextButton add{"Add VST3 / LADSPA"},remove{"Remove"},edit{"Open editor"},parameters{"Parameters"},original{"Plugin UI"},bypass{"Bypass"},up{"Move up"},down{"Move down"};
-    ComboBox list;Label status;std::unique_ptr<FileChooser> chooser;int ticks=0,operationDepth=0;bool saving=false,editorWasOpen=false;
+    ComboBox list;Label status;std::unique_ptr<FileChooser> chooser;int ticks=0,operationDepth=0;bool saving=false,editorWasOpen=false,incompleteLoad=false;
     explicit Rack(File dir,String node,String label):folder(dir),nodeName(node),title(label){
         folder.createDirectory();formats.addDefaultFormats();
         publishVisibility(false);
@@ -76,10 +76,11 @@ public:
         auto doc=JSON::parse(folder.getChildFile("rack.json"));const auto items=doc["plugins"];
         const String quarantined=folder.getChildFile("loading.txt").loadFileAsString();
         if(auto* a=items.getArray())for(const auto& item:*a){
-            auto xml=parseXML(item["description"].toString());PluginDescription d;if(!xml||!d.loadFromXml(*xml))continue;
-            if(d.createIdentifierString()==quarantined){report("Skipped a plugin that previously crashed while loading: "+d.name);continue;}
+            auto xml=parseXML(item["description"].toString());PluginDescription d;if(!xml||!d.loadFromXml(*xml)){incompleteLoad=true;continue;}
+            if(d.createIdentifierString()==quarantined){incompleteLoad=true;report("Skipped a plugin that previously crashed while loading: "+d.name);continue;}
             folder.getChildFile("loading.txt").replaceWithText(d.createIdentifierString());
-            instantiate(d,item["state"].toString(),bool(item["bypass"]));folder.getChildFile("loading.txt").deleteFile();
+            if(!instantiate(d,item["state"].toString(),bool(item["bypass"])))incompleteLoad=true;
+            folder.getChildFile("loading.txt").deleteFile();
         }
     }
     void pulse(){
@@ -102,15 +103,15 @@ public:
     };
     void audioProcessorParameterChanged(AudioProcessor*,int,float) override{stateDirty=true;}
     void audioProcessorChanged(AudioProcessor*,const AudioProcessorListener::ChangeDetails&) override{stateDirty=true;}
-    void save(){
-        if(saving)return;ScopedValueSetter<bool> savingGuard(saving,true);
+    bool save(){
+        if(saving||incompleteLoad)return false;ScopedValueSetter<bool> savingGuard(saving,true);
         Operation operation(*this,"save state");stateDirty=false;
         // Slot edits and saving both run on the message thread. Do not hold
         // the rack/audio lock while invoking plugin state APIs: a bridged
         // plugin may need its audio thread to complete the state request.
         Array<var> a;
         for(auto& s:slots){MemoryBlock data;s.plugin->getStateInformation(data);auto* o=new DynamicObject;o->setProperty("description",s.description.createXml()->toString());o->setProperty("state",data.toBase64Encoding());o->setProperty("bypass",s.bypass);a.add(var(o));}
-        auto* root=new DynamicObject;root->setProperty("plugins",a);const String text=JSON::toString(var(root));if(folder.getChildFile("rack.json").loadFileAsString()==text)return;TemporaryFile tmp(folder.getChildFile("rack.json"));if(tmp.getFile().replaceWithText(text))tmp.overwriteTargetFileWithTemporary();
+        auto* root=new DynamicObject;root->setProperty("plugins",a);const String text=JSON::toString(var(root));if(folder.getChildFile("rack.json").loadFileAsString()==text)return true;TemporaryFile tmp(folder.getChildFile("rack.json"));const bool ok=tmp.getFile().replaceWithText(text)&&tmp.overwriteTargetFileWithTemporary();if(!ok)stateDirty=true;return ok;
     }
     void choose(){
         chooser=std::make_unique<FileChooser>("Select a Linux VST3 bundle or yabridge VST3 wrapper",File::getSpecialLocation(File::userHomeDirectory).getChildFile(".vst3"),"*.vst3;*.so",false);
@@ -176,6 +177,12 @@ public:
         if(folder.getChildFile("hide.request").existsAsFile()){folder.getChildFile("hide.request").deleteFile();if(hide)hide();}
         if(folder.getChildFile("show.request").existsAsFile()){folder.getChildFile("show.request").deleteFile();if(show)show();}
         if(folder.getChildFile("quit.request").existsAsFile()){folder.getChildFile("quit.request").deleteFile();JUCEApplication::quit();return;}
+        const auto saveRequest=folder.getChildFile("save.request");
+        if(saveRequest.existsAsFile()){
+            const String token=saveRequest.loadFileAsString();saveRequest.deleteFile();const bool ok=save();
+            auto* ack=new DynamicObject;ack->setProperty("token",token);ack->setProperty("pid",int64(getpid()));ack->setProperty("ok",ok);
+            TemporaryFile reply(folder.getChildFile("save.reply.json"));if(reply.getFile().replaceWithText(JSON::toString(var(ack))))reply.overwriteTargetFileWithTemporary();
+        }
         const double next=requestedRate.load();if(next!=rate){std::lock_guard<std::mutex> guard(mutex);rate=next;for(auto& s:slots){s.plugin->releaseResources();s.plugin->setRateAndBufferSizeDetails(rate,maxFrames);s.plugin->prepareToPlay(rate,maxFrames);}}
         if(++ticks%4==0){
             const auto count=callbacks.load(std::memory_order_relaxed);

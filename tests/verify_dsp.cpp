@@ -27,6 +27,9 @@ int main(){
     for(int c=0;c<2;++c){fx->connect_port(f,c,zero.data());fx->connect_port(f,c+2,c==0?impulse.data():zero.data());fx->connect_port(f,c+4,c==0?wetL.data():wetR.data());}
     std::array<float*,6> controls{&room,&damping,&delayMs,&feedback,&verbReturn,&delayReturn};for(int c=0;c<6;++c)fx->connect_port(f,c+6,controls[c]);fx->activate(f);fx->run(f,48000);
     assert(std::abs(wetL[2400]-.5f)<1e-6&&std::abs(wetL[4800]-.25f)<1e-6);for(float v:wetR)assert(v==0);
-    fx->connect_port(f,0,impulse.data());fx->connect_port(f,2,zero.data());verbReturn=1;delayReturn=0;fx->activate(f);fx->run(f,48000);double tail=0;for(int i=1000;i<20000;++i){assert(std::isfinite(wetL[i]));tail+=wetL[i]*wetL[i];}assert(tail>.001);fx->cleanup(f);
+    fx->connect_port(f,0,impulse.data());fx->connect_port(f,2,zero.data());verbReturn=1;delayReturn=0;fx->activate(f);fx->run(f,48000);double tail=0;for(int i=1000;i<20000;++i){assert(std::isfinite(wetL[i]));tail+=wetL[i]*wetL[i];}assert(tail>.001);// Room/damping/echo-feedback steps must ramp instead of jumping.
+    fx->activate(f);room=0;damping=0;feedback=0;verbReturn=1;delayReturn=1;fx->run(f,1);
+    room=1;damping=.9f;feedback=.85f;fx->run(f,2400);fx->run(f,48000);for(float v:wetL)assert(std::isfinite(v));
+    fx->cleanup(f);
     std::cout<<"PASS: 10 ms gain/send fades, interrupted fades, linked stereo limiting, -1 dBFS ceiling non-finite protection, exact echo timing/feedback, reverb tail and stereo separation.\n";
 }

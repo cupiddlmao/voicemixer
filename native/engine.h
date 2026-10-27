@@ -75,6 +75,7 @@ private:
     QByteArray meterBuffer;
     QByteArray auxMeterBuffer;
     int captureId=-1, sourceId=-1, broadcastId=-1, auxId=-1;
+    bool profileOperation=false;
     bool starting=false, pending=false, stoppedExplicitly=false, restartRequested=false;
     qint64 retryAfter=0;
     int recoveryAttempts=0;

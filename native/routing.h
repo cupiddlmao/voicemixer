@@ -1,5 +1,6 @@
 #pragma once
 #include "routing_settings.h"
+#include "meter_readers.h"
 #include <QtCore/QObject>
 #include <QtCore/QProcess>
 #include <QtCore/QJsonArray>
@@ -42,8 +43,8 @@ private:
     QHash<int,QString> sinkBySerial;
     QSet<int> hardwareSinkIds;
     QList<Port> ports;
-    std::array<std::unique_ptr<QProcess>,11> meters;
-    std::array<QByteArray,11> buffers;
+    MeterReaders meters;
+    QTimer meterTimer;
     QHash<int,QString> streamTokens;
     QSet<QString> appliedStreams;
     qint64 retryAfter=0;
