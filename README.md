@@ -16,8 +16,9 @@ vendored components retain their own licenses and notices (see [vendor](vendor/R
 
 ## Screenshots
 
-Actual application windows captured with a clean profile, before selecting audio
-devices. The recorder example uses a generic recording folder.
+Actual application windows captured with an isolated profile, before selecting audio
+devices. The first input shows the two-axis Position pad; the recorder example
+uses a generic recording folder.
 
 ![Voicemixer main mixing console](docs/screenshots/console.png)
 
