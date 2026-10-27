@@ -18,7 +18,7 @@
 #include <QtWidgets/QDialogButtonBox>
 #include "console.h"
 #ifndef VOICEMIXER_VERSION
-#define VOICEMIXER_VERSION "0.4.1"
+#define VOICEMIXER_VERSION "0.5.0"
 #endif
 UpdateChecker::UpdateChecker(QObject* parent,QNetworkAccessManager* transport):QObject(parent),network(transport?transport:new QNetworkAccessManager(this)),preferences(stateRoot()+"/update-preferences.ini",QSettings::IniFormat){
     QTimer::singleShot(15000,this,[this]{

@@ -21,7 +21,7 @@ recording folder. Login startup entries are also kept.
 
 ## Gentoo / KDE source-build ZIP
 
-1. Download `linux-mixer-0.4.1-gentoo-friend.zip` and extract into a NEW folder.
+1. Download `linux-mixer-0.5.0-gentoo-friend.zip` and extract into a NEW folder.
 2. Follow its INSTALL.txt for dependencies. New plugin hosting requires FreeType,
    ALSA and X11 development libraries in addition to Qt/PipeWire.
 3. In that extracted folder, run as your normal user:
@@ -47,7 +47,7 @@ installed profile, but do not run both controllers at once.
 
 ## Ubuntu source build
 
-Install the build dependencies listed in README.md. Extract the 0.4.1 source,
+Install the build dependencies listed in README.md. Extract the 0.5.0 source,
 configure/build it, and install to the same prefix you used before. An existing
 .deb installation should only be upgraded with a package built for that Ubuntu
 release; do not install a binary built on Arch as an Ubuntu package.
