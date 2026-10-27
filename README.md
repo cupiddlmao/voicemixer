@@ -184,41 +184,37 @@ cmake --build build -j2
 sudo cmake --install build
 ```
 
-## Send to a friend
+## Download and share
 
-`python3 packaging/release.py` creates release files in `dist/` using an explicit
-source allowlist. Personal settings, device names, app rules, runtime logs, local
-SDK files and unrelated user files are excluded.
+This is where to get a copy for another computer; you do **not** need to run the
+release script to install Voicemixer. Download the matching files from the
+[v0.5.0 preview release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.5.0):
 
-- **Ubuntu 26.04 amd64**: send the generated `.deb` plus the matching source
-  archive. Install with `sudo apt install ./linux-mixer-*.deb` so apt resolves
-  runtime dependencies. This build depends on Ubuntu 26.04's Qt libraries and
-  should not be advertised as a universal Ubuntu binary.
-- **Arch**: send the `dist/arch/` folder containing PKGBUILD and the checksummed
-  source archive. Your friend runs `makepkg -si` there to build and install an
-  Arch-native `.pkg.tar.zst`. This recipe is prepared but has not been executed
-  on Arch yet. The official LADSPA package is `zam-plugins-ladspa`.
-- **Gentoo/KDE**: download the Gentoo ZIP from the current release, extract it and
-  open `INSTALL.txt`. It includes the matching source, dependency/USE
-  requirements, PipeWire checks and a per-user build/install helper. It is a
-  manual source installation, not a prebuilt binary or Portage ebuild, and has
-  not been tested on Gentoo. Generate it with `python3 packaging/gentoo/bundle.py`
-  after producing the matching release source archive.
-- **Other Ubuntu releases**: build from the source archive on that release,
-  then run the release script to produce a package linked to that system's Qt.
-  Ubuntu 24.04 and other releases have not yet been validated.
+- **Ubuntu 26.04 amd64:** download `linux-mixer-0.5.0-ubuntu26.04-x86_64.deb`
+  and install with `sudo apt install ./linux-mixer-0.5.0-ubuntu26.04-x86_64.deb`.
+  The Ubuntu ZIP includes that same `.deb`, the source and installation notes.
+  This binary was built on Ubuntu 26.04; it is **not** a universal Ubuntu package.
+- **Arch/CachyOS:** download `linux-mixer-0.5.0-arch-friend.zip`, extract it and
+  run `makepkg -si` in the extracted folder as your normal user. This builds an
+  Arch-native package from the included, checksummed source. Clean Arch has not
+  been validated; read `INSTALL.txt` before running it.
+- **Gentoo/KDE:** download `linux-mixer-0.5.0-gentoo-friend.zip`, extract it and
+  follow `INSTALL.txt`. This is a per-user source build, not a prebuilt package
+  or Portage ebuild; it has not been validated on Gentoo.
+- **Other Linux versions:** use `linux-mixer-0.5.0-source.tar.gz` and the build
+  instructions above. Other Ubuntu releases have not been validated.
 
-The package installs the binary, compiled DSP/RNNoise plugins, desktop launcher,
-icon and licenses. First run starts with fresh settings; your friend chooses
-his own devices. Installed settings live under the per-user Qt config directory
-(usually `~/.config/PersonalAudio/Linux Mixer/`). The development checkout keeps
-`settings.json` and `.runtime/` locally. `LINUX_MIXER_STATE_DIR` overrides this for
-tests. The executable no longer embeds the developer's source-folder path.
+Download `SHA256SUMS` to verify the files. The downloads do not contain the
+author's device settings, plugin installations or recordings: each person picks
+their own devices on first launch. Installed settings usually live in
+`~/.config/PersonalAudio/Linux Mixer/` and are preserved across upgrades. There
+is no AppImage or automatic installer for other distributions.
 
-The source archive contains all vendored source and build instructions for the
-shipped RNNoise binary. Keep it alongside the binary when sharing. A portable
-AppImage has not been built; native packages fit the required PipeWire tools and
-LADSPA dependencies better for this first release.
+**For maintainers:** `python3 packaging/release.py --source-only` builds the
+source and Arch/Gentoo kits in `dist/`. On Ubuntu 26.04, run it without
+`--source-only` to also build the native `.deb` and Ubuntu ZIP; it runs `ctest`
+before packaging. The script uses an explicit source allowlist so local settings,
+logs, recordings and development files are not included.
 
 ## Updating
 
