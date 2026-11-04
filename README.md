@@ -3,8 +3,10 @@
 A native Linux audio mixer for PipeWire, with five hardware inputs, three virtual
 app inputs, eight output buses, voice processing and a tape recorder.
 
-**Early release:** tested on Ubuntu 26.04; the Arch build recipe is provided but
-has not yet been tested on Arch. A [Gentoo/KDE source-build kit](docs/GENTOO-INSTALL.txt)
+**Early release:** tested on Ubuntu 26.04 and Arch Linux (CachyOS); the native
+build, mixer and audio/plugin checks work on CachyOS, but the `makepkg` recipe
+has not yet been run in a clean Arch installation. A
+[Gentoo/KDE source-build kit](docs/GENTOO-INSTALL.txt)
 is also available and has not yet been tested on Gentoo. See [Arch setup](docs/ARCH-INSTALL.txt) and
 [recorder instructions](docs/RECORDER.md). The executable and virtual devices
 currently retain their `linux-mixer` / **Linux Mixer** names for compatibility.
@@ -196,8 +198,10 @@ release script to install Voicemixer. Download the matching files from the
   This binary was built on Ubuntu 26.04; it is **not** a universal Ubuntu package.
 - **Arch/CachyOS:** download `linux-mixer-0.5.0-arch-friend.zip`, extract it and
   run `makepkg -si` in the extracted folder as your normal user. This builds an
-  Arch-native package from the included, checksummed source. Clean Arch has not
-  been validated; read `INSTALL.txt` before running it.
+  Arch-native package from the included, checksummed source. The native 0.5.0
+  build, mixer and audio/plugin checks are tested on CachyOS; the `makepkg`
+  recipe has not yet been run in a clean Arch installation, so read
+  `INSTALL.txt` first.
 - **Gentoo/KDE:** download `linux-mixer-0.5.0-gentoo-friend.zip`, extract it and
   follow `INSTALL.txt`. This is a per-user source build, not a prebuilt package
   or Portage ebuild; it has not been validated on Gentoo.
@@ -232,9 +236,12 @@ same location; do not delete them during an update. There is no automatic update
 
 ## Validation and limits
 
-Tested here: Ubuntu 26.04, PipeWire 1.6.2, Qt 6.10.2 and a Razer Seiren Mini.
-Five simultaneous hardware chains are exercised with virtual interfaces; five
-physical microphones and an Arch machine were not available for testing.
+Tested here: Ubuntu 26.04 and CachyOS (Arch-based), PipeWire 1.6.2/1.6.10,
+Qt 6.10.2 and a Razer Seiren Mini. On CachyOS, the 0.5.0 native build and all
+five virtual-feed integration checks passed: matrix, EQ/FX, hardware, position
+and plugins. The real Auto-Tune/Wider rack was not part of that final pass. Five
+simultaneous hardware chains are exercised with virtual interfaces; five
+physical microphones were not available for testing.
 
 ```bash
 ctest --test-dir build --output-on-failure
