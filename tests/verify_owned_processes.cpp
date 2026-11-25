@@ -54,7 +54,10 @@ int main(int argc,char** argv){
     // predecessor unaddressable while it still held the stable linux_mixer.* node names.
     auto* b=spawnGraph(runtime,kind,&app);spawned.append(b);
     owned_processes::record(runtime,kind,b->processId());
-    assert(owned_processes::live(runtime,kind)==QList<qint64>{a->processId(),b->processId()});
+    // Hoisted out of assert(): a braced list carries a top-level comma, which older assert
+    // macros read as two arguments (found by CI on GCC 13; GCC 16 accepts it).
+    const QList<qint64> both{a->processId(),b->processId()};
+    assert(owned_processes::live(runtime,kind)==both);
     assert(owned_processes::newest(runtime,kind)==b->processId());
     {QFile raw(runtime+"/"+kind+".pid");assert(raw.open(QIODevice::ReadOnly));
      const auto body=QString::fromUtf8(raw.readAll());
