@@ -190,22 +190,22 @@ sudo cmake --install build
 
 This is where to get a copy for another computer; you do **not** need to run the
 release script to install Voicemixer. Download the matching files from the
-[v0.5.0 preview release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.5.0):
+[v0.5.1 preview release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.5.1):
 
-- **Ubuntu 26.04 amd64:** download `linux-mixer-0.5.0-ubuntu26.04-x86_64.deb`
-  and install with `sudo apt install ./linux-mixer-0.5.0-ubuntu26.04-x86_64.deb`.
+- **Ubuntu 26.04 amd64:** download `linux-mixer-0.5.1-ubuntu26.04-x86_64.deb`
+  and install with `sudo apt install ./linux-mixer-0.5.1-ubuntu26.04-x86_64.deb`.
   The Ubuntu ZIP includes that same `.deb`, the source and installation notes.
   This binary was built on Ubuntu 26.04; it is **not** a universal Ubuntu package.
-- **Arch/CachyOS:** download `linux-mixer-0.5.0-arch-friend.zip`, extract it and
+- **Arch/CachyOS:** download `linux-mixer-0.5.1-arch-friend.zip`, extract it and
   run `makepkg -si` in the extracted folder as your normal user. This builds an
   Arch-native package from the included, checksummed source. The native 0.5.0
   build, mixer and audio/plugin checks are tested on CachyOS; the `makepkg`
   recipe has not yet been run in a clean Arch installation, so read
   `INSTALL.txt` first.
-- **Gentoo/KDE:** download `linux-mixer-0.5.0-gentoo-friend.zip`, extract it and
+- **Gentoo/KDE:** download `linux-mixer-0.5.1-gentoo-friend.zip`, extract it and
   follow `INSTALL.txt`. This is a per-user source build, not a prebuilt package
   or Portage ebuild; it has not been validated on Gentoo.
-- **Other Linux versions:** use `linux-mixer-0.5.0-source.tar.gz` and the build
+- **Other Linux versions:** use `linux-mixer-0.5.1-source.tar.gz` and the build
   instructions above. Other Ubuntu releases have not been validated.
 
 Download `SHA256SUMS` to verify the files. The downloads do not contain the
