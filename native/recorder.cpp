@@ -106,7 +106,12 @@ void Recorder::consume(const QJsonArray& graph){
     const bool playerExists=nodes.contains(prefix+".recorder.player");
     playLinksReady=playerExists&&nodes.contains(busCaptureName(5,prefix));
     if(playerExists)for(int b=0;b<8;++b)for(int c=0;c<2;++c)link(port(prefix+".recorder.player",c==0?"FL":"FR","output"),port(busCaptureName(b,prefix),QString("AUX%1").arg(16+c),"input"));
-    if(linker.state()==QProcess::NotRunning){linkQueue.clear();for(const auto& pair:newLinks)linkQueue.enqueue(pair);nextLink();}
+    // Queue new links even while the linker is busy; nextLink() drains them when it finishes.
+    // Nothing else refreshes the graph at that point, so dropping them here would stall the link.
+    if(linker.state()==QProcess::NotRunning)linkQueue.clear();
+    else linkQueue.removeIf([&](const QPair<int,int>& p){return !newLinks.contains(p);});
+    for(const auto& pair:newLinks)if(!linkQueue.contains(pair))linkQueue.enqueue(pair);
+    nextLink();
     if(decoderPending&&playerExists&&linkQueue.empty()&&linker.state()==QProcess::NotRunning)startDecoder();
 }
 void Recorder::setActive(bool value){

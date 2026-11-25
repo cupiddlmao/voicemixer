@@ -10,6 +10,7 @@
 #include <QtCore/QSaveFile>
 #include <QtCore/QTimer>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QThread>
 #include <QtCore/QDateTime>
 #include <QtCore/QFileInfo>
 #include <algorithm>
@@ -202,7 +203,23 @@ void RoutingMatrix::stop(){
     stopping=true;ready=false;starting=failed=false;dirty=false;commands.clear();queued.clear();
     if(worker.state()!=QProcess::NotRunning){worker.terminate();worker.waitForFinished(1000);}
     meters.stop();inputPeak.fill(-90);busPeak.fill(-90);engine.auxPeakDb=-90;
-    const auto pid=ownedPid();if(pid)kill(pid,SIGTERM);QFile::remove(runtime+"/matrix.pid");nodeIds.clear();ports.clear();links.clear();stopping=false;
+    const auto pid=ownedPid();
+    if(pid){
+        kill(pid,SIGTERM);
+        // Wait for the engine to actually exit before dropping our bookkeeping. Its filter-chain data
+        // loop reads port buffers right up to the end of teardown, so returning while the old context
+        // was still being destroyed let the DSP run() touch already-unmapped buffers, and it also let
+        // start() launch a new instance against a half-dead one. SIGKILL only as a last resort.
+        const auto engineAlive=[pid]{return kill(pid,0)==0;};
+        QElapsedTimer deadline;deadline.start();
+        while(deadline.elapsed()<1500&&engineAlive())QThread::msleep(10);
+        if(engineAlive()){
+            kill(pid,SIGKILL);
+            deadline.restart();
+            while(deadline.elapsed()<500&&engineAlive())QThread::msleep(10);
+        }
+    }
+    QFile::remove(runtime+"/matrix.pid");nodeIds.clear();ports.clear();links.clear();stopping=false;
 }
 void RoutingMatrix::shutdown(){
     meterTimer.stop();

@@ -2,6 +2,16 @@
 .deps/*
 !.deps/README.md
 __pycache__/
+*.pyc
 build/
 settings.json
 dist/
+
+# Agent/editor scratch, never part of the project
+.cloud-attachments/
+.playwright-mcp/
+.freebuff/
+
+# Personal local files: a saved profile bundle and the obsolete prototype
+gggg.json
+mixer.py

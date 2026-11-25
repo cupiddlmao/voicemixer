@@ -3,13 +3,18 @@
 import argparse
 import hashlib
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 
 ROOT=Path(__file__).resolve().parents[1]
-VERSION='0.5.0'
+# Single source of truth: the CMake project version. A hardcoded literal here is how a
+# 0.5.0 tree ended up publishing archives named 0.4.1.
+VERSION=re.search(r'project\(LinuxMixer VERSION (\S+) ',(ROOT/'CMakeLists.txt').read_text()).group(1)
+if f"pkgver={VERSION}" not in (ROOT/'packaging/arch/PKGBUILD').read_text():
+    sys.exit('packaging/arch/PKGBUILD pkgver does not match the CMake project version')
 parser=argparse.ArgumentParser()
 parser.add_argument('--source-only',action='store_true')
 args=parser.parse_args()

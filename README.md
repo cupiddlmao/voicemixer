@@ -65,7 +65,7 @@ configuration of open-source processors, not VoiceMeeter's algorithms.
   presets remain supported. See [profile instructions](docs/PROFILES.md).
 
 The virtual EQs, recorder, reverb/delay and master balance/mono controls are
-functional in version 0.3. The recorder follows the documented tape workflow;
+functional in this release. The recorder follows the documented tape workflow;
 see [recorder controls and behavior](docs/RECORDER.md). Reverb/delay use our own
 native DSP, rather than VB-Audio's proprietary FX algorithms. VBAN, ASIO, MIDI,
 macro control, external FX inserts, surround upmix and full parametric master EQ
@@ -231,8 +231,12 @@ Quit action; closing the window only hides it and leaves the old version running
 - **Gentoo:** run `bash build.sh --install` in the new ZIP's extracted folder,
   using the same installation prefix as before.
 
+Install the new version over the old one, using the same prefix, to keep your
+settings. Back up the profile first (see [profile instructions](docs/PROFILES.md)).
 Launch Linux Mixer again afterward. Installed per-user settings are kept in the
 same location; do not delete them during an update. There is no automatic updater.
+Full details, including migrating from a source-folder launch, are in
+[upgrade instructions](docs/UPDATING.md).
 
 ## Validation and limits
 
@@ -289,8 +293,7 @@ is used only for development checks and packaging.
 `packaging/` holds install assets and release tooling. `.runtime/` holds generated
 configs, owned-process PID files, locks and logs. Meter samples are held in memory;
 the recorder writes files only when REC is pressed. Internal processed sources belong to the
-engine; choose B1/B2/B3 in voice apps. `mixer.py` is the obsolete initial prototype
-and does not control this full mixer.
+engine; choose B1/B2/B3 in voice apps.
 
 Relevant upstream details: [PipeWire filter chains](https://docs.pipewire.org/page_module_filter_chain.html),
 [WirePlumber stream state](https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/stream.html),
@@ -300,11 +303,6 @@ and [Arch LADSPA dependency](https://archlinux.org/packages/extra/x86_64/zam-plu
 
 Click **Plugins** on any input strip for an isolated VST3/LADSPA rack. Windows VST3
 plugins use Wine and yabridge. See [plugin setup and limitations](docs/PLUGINS.md).
-
-## Updating
-
-Install the new version over the old one to keep your settings. Quit the controller
-first and back up the profile. See [upgrade instructions](docs/UPDATING.md).
 
 ## Audio health and update checks
 

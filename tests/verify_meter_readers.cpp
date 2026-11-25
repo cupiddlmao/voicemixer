@@ -23,7 +23,7 @@ int main(int argc,char** argv){
     for(int i=0;i<MeterReaders::count;++i){assert(readers.takeError(i).isEmpty());assert(std::abs(readers.takePeak(i)-(i+1)*.05)<1e-5);assert(readers.takePeak(i)==0);}
     readers.startMeter(0,"/nonexistent/voicemixer-test-meter",{});deadline.restart();
     while(readers.state(0)!=QProcess::NotRunning&&deadline.elapsed()<3000)QThread::msleep(10);
-    assert(!readers.takeError(0).isEmpty());
+    assert(!readers.takeError(0).isEmpty());assert(readers.state(0)==QProcess::NotRunning);assert(readers.takePeak(0)==0);assert(readers.takeError(0).isEmpty());
     for(int i=0;i<MeterReaders::count;++i)readers.startMeter(i,app.applicationFilePath(),{"--hang"});
     QThread::msleep(50);deadline.restart();readers.stop();assert(deadline.elapsed()<1500);
     readers.startMeter(0,app.applicationFilePath(),{"--produce","0.75",dir.path()+"/restart"});deadline.restart();
