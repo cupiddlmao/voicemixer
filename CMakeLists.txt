@@ -102,13 +102,25 @@ install(FILES vendor/README.md DESTINATION share/doc/linux-mixer RENAME THIRD-PA
 install(FILES vendor/rnnoise-plugin/LICENSE DESTINATION share/doc/linux-mixer RENAME RNNoise-LICENSE)
 set(CPACK_GENERATOR "DEB")
 set(CPACK_PACKAGE_NAME "linux-mixer")
+# Name the package after the distribution it was really built on. Assuming Ubuntu here is what
+# produced "linux-mixer-0.5.1-ubuntu-x86_64.deb" from a CachyOS box: that host has an /etc/os-release
+# with no VERSION_ID line, so the substitution came out empty and the file kept only the word
+# "ubuntu". packaging/release.py then globbed for -ubuntu26.04-*.deb, matched nothing, and still
+# wrote an ubuntu "friend" zip whose INSTALL.txt tells people to install a .deb that is not in it.
 if(EXISTS "/etc/os-release")
+  file(STRINGS "/etc/os-release" OS_RELEASE_ID REGEX "^ID=")
   file(STRINGS "/etc/os-release" OS_RELEASE_VERSION REGEX "^VERSION_ID=")
+  string(REGEX REPLACE "ID=\"?([^\"]+)\"?" "\\1" HOST_DISTRO_ID "${OS_RELEASE_ID}")
   string(REGEX REPLACE "VERSION_ID=\"?([^\"]+)\"?" "\\1" HOST_DISTRO_VERSION "${OS_RELEASE_VERSION}")
 else()
-  set(HOST_DISTRO_VERSION "native")
+  set(HOST_DISTRO_ID "native")
 endif()
-set(CPACK_PACKAGE_FILE_NAME "linux-mixer-${PROJECT_VERSION}-ubuntu${HOST_DISTRO_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
+if(HOST_DISTRO_VERSION)
+  set(HOST_DISTRO_TAG "${HOST_DISTRO_ID}${HOST_DISTRO_VERSION}")
+else()
+  set(HOST_DISTRO_TAG "${HOST_DISTRO_ID}")
+endif()
+set(CPACK_PACKAGE_FILE_NAME "linux-mixer-${PROJECT_VERSION}-${HOST_DISTRO_TAG}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_CONTACT "Linux Mixer contributors")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Personal PipeWire audio mixing console")

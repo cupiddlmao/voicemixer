@@ -48,6 +48,14 @@ for target in (('arch',) if args.source_only else ('ubuntu26.04','arch')):
             instructions=(ROOT/'docs/ARCH-INSTALL.txt').read_text()
         else:
             packages=sorted(out.glob(f'linux-mixer-{VERSION}-ubuntu26.04-*.deb'))
+            if not packages:
+                # Before this check the glob silently matched nothing and the zip was written
+                # anyway, so a release could ship an Ubuntu kit with no Ubuntu package in it.
+                found=', '.join(sorted(f.name for f in out.glob('linux-mixer-*.deb'))) or 'none'
+                sys.exit(f'No linux-mixer-{VERSION}-ubuntu26.04-*.deb in {out} (found: {found}). '
+                         'The Ubuntu asset has to be built on Ubuntu 26.04, or inside a container '
+                         'of it: a .deb built without dpkg-shlibdeps has no dependency list and '
+                         'CPack would default its architecture to i386.')
             for f in packages:bundle.write(f,f.name)
             instructions='For Ubuntu 26.04 amd64. In the extracted folder run:\n  sudo apt install ./linux-mixer-*.deb\nThen launch Linux Mixer and choose your own mic/headphone devices.\nOther Ubuntu releases need a build for their version.\n'
         bundle.write(ROOT/'docs/UPDATING.md','UPDATING.md')
