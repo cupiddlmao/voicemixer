@@ -29,6 +29,12 @@ static QProcess* spawnGraph(const QString& runtime,const QString& kind,QObject* 
     auto* process=new QProcess(parent);
     process->setProgram("bash");process->setArguments({"-c",command});
     process->start();assert(process->waitForStarted(5000));
+    // waitForStarted only proves bash exists. Its exec into the fake graph image is async, so
+    // without this settle wait a fast caller sees argv[0]=="bash" instead of "pipewire" and a
+    // scan like adopt() finds nothing. This raced on a loaded CI runner but not on an idle box.
+    QElapsedTimer settle;settle.start();
+    while(!owned_processes::matches(runtime,kind,process->processId())&&settle.elapsed()<5000)QThread::msleep(10);
+    assert(owned_processes::matches(runtime,kind,process->processId()));
     return process;
 }
 
