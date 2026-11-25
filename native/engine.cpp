@@ -1,6 +1,7 @@
 #include "audio_health.h"
 #include "process_guard.h"
 #include "paths.h"
+#include "owned_processes.h"
 #include "engine.h"
 #include "routing.h"
 #include "plugin_racks.h"
@@ -64,6 +65,9 @@ bool Engine::writeJson(const QString& path,const QJsonObject& object) {
 }
 Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"/.runtime") {
     QDir().mkpath(runtime);
+    // Heal graphs an earlier controller lost track of (overwritten pid file, failed write, or a
+    // controller that was killed) so that the next Stop can reach them instead of leaking them.
+    owned_processes::adopt(runtime,"engine");owned_processes::adopt(runtime,"matrix");
     QFile saved(root+"/settings.json");
     if(saved.open(QIODevice::ReadOnly)) settings.load(QJsonDocument::fromJson(saved.readAll()).object());
     health=std::make_unique<AudioHealth>(this);health->changed=[this]{notify();};
@@ -177,16 +181,9 @@ void Engine::notify(){if(changed)changed();}
 void Engine::refresh(){if(discovery.state()==QProcess::NotRunning)discovery.start("pw-dump");}
 void Engine::save(){saveTimer.stop();if(!writeJson(root+"/settings.json",settings.json())){message="Could not save settings";notify();}}
 qint64 Engine::ownedPid(const QString& kind) const {
-    QFile pidFile(runtime+"/"+kind+".pid");if(!pidFile.open(QIODevice::ReadOnly))return 0;
-    bool ok=false;const qint64 pid=pidFile.readAll().trimmed().toLongLong(&ok);if(!ok || pid<=1)return 0;
-    QFile cmd("/proc/"+QString::number(pid)+"/cmdline");if(!cmd.open(QIODevice::ReadOnly))return 0;
-    const auto args=cmd.readAll().split('\0'); if(args.empty())return 0;
-    const QString exe=QFileInfo(QString::fromUtf8(args[0])).fileName();
-    const bool matches=kind=="engine" ? exe=="pipewire" && args.contains((runtime+"/microphone.conf").toUtf8())
-        :exe=="pw-loopback" && args.contains(kind=="aux"?QByteArray("linux_mixer.aux.engine"):QByteArray("linux_mixer.monitor"));
-    return matches ? pid : 0;
+    return owned_processes::newest(runtime,kind);
 }
-void Engine::stopOwned(const QString& kind){const auto pid=ownedPid(kind);if(pid)kill(pid,SIGTERM);QFile::remove(runtime+"/"+kind+".pid");}
+void Engine::stopOwned(const QString& kind){owned_processes::stopAll(runtime,kind);}
 
 QJsonObject Engine::configuration() const {
     QString gate;
@@ -256,7 +253,7 @@ void Engine::start(){
         launcher.setStandardOutputFile(runtime+"/engine.log");launcher.setStandardErrorFile(runtime+"/engine.log",QIODevice::Append);
         qint64 pid=0;
         if(!launcher.startDetached(&pid)){starting=false;message="Cannot launch PipeWire engine";notify();return;}
-        QFile f(runtime+"/engine.pid");if(f.open(QIODevice::WriteOnly))f.write(QByteArray::number(pid));
+        owned_processes::record(runtime,"engine",pid);
         QTimer::singleShot(300,this,[this]{refresh();});
         QTimer::singleShot(5000,this,[this]{if(starting){starting=false;message="Engine failed to publish mic; check .runtime/engine.log";notify();}});
     });

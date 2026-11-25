@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <initializer_list>
 #include <new>
 #include <vector>
 extern "C" {
@@ -39,15 +40,23 @@ LADSPA_Handle instantiate(const LADSPA_Descriptor* d,unsigned long rate){auto* s
     }return s;}
 void connectPort(LADSPA_Handle h,unsigned long port,float* data){if(port<18)static_cast<State*>(h)->ports[port]=data;}
 void activate(LADSPA_Handle h){auto& s=*static_cast<State*>(h);s.ramps={};s.reduction=1;s.echoPosition=0;for(auto& line:s.comb){std::fill(line.samples.begin(),line.samples.end(),0);line.position=0;line.damped=0;}for(auto& ring:s.echo)std::fill(ring.begin(),ring.end(),0);}
+// Only the ports a branch actually dereferences are required; control ports stay optional
+// because control() already falls back on a null pointer.
+bool connected(const State& s,std::initializer_list<int> needed){for(int i:needed)if(!s.ports[i])return false;return true;}
 void run(LADSPA_Handle h,unsigned long count){
+    if(!h)return;
     auto& s=*static_cast<State*>(h);const unsigned rampFrames=std::max(1u,s.rate/100); // 10 ms, sample-by-sample
+    if(!count)return; // zero-frame flush: no samples to read, so never touch the port buffers
     if(s.kind==0){
+        if(!connected(s,{0,1}))return;
         s.ramps[0].set(std::clamp(control(s,2,1),0.f,16.f),rampFrames);
         for(unsigned long i=0;i<count;++i)s.ports[1][i]=finite(s.ports[0][i])*s.ramps[0].tick()+control(s,3,0);
     }else if(s.kind==1){
+        if(!connected(s,{8}))return;
         for(int c=0;c<8;++c)s.ramps[c].set(std::clamp(control(s,9+c,0),0.f,4.f),rampFrames);
         for(unsigned long i=0;i<count;++i){float sum=0;for(int c=0;c<8;++c){const float gain=s.ramps[c].tick();if(s.ports[c])sum+=finite(s.ports[c][i])*gain;}s.ports[8][i]=finite(sum);}
     }else if(s.kind==2){
+        if(!connected(s,{0,1,2,3}))return;
         const float ceiling=std::pow(10.f,std::clamp(control(s,4,-1),-12.f,0.f)/20);
         const float release=std::exp(-1.f/(.08f*s.rate));
         for(unsigned long i=0;i<count;++i){const float l=finite(s.ports[0][i]),r=finite(s.ports[1][i]);const float peak=std::max(std::abs(l),std::abs(r));
@@ -56,11 +65,12 @@ void run(LADSPA_Handle h,unsigned long count){
             s.ports[2][i]=std::clamp(l*s.reduction,-ceiling,ceiling);s.ports[3][i]=std::clamp(r*s.reduction,-ceiling,ceiling);
         }
     }else{
+        if(!connected(s,{0,1,2,3,4,5}))return;
         s.ramps[3].set(std::clamp(control(s,6,.5),0.f,1.f),rampFrames);s.ramps[4].set(std::clamp(control(s,7,.35),0.f,.98f),rampFrames);
         s.ramps[5].set(std::clamp(control(s,9,.3),0.f,.85f),rampFrames);
         s.ramps[0].set(std::clamp(control(s,8,350),1.f,2000.f),rampFrames);
         s.ramps[1].set(std::clamp(control(s,10,1),0.f,4.f),rampFrames);s.ramps[2].set(std::clamp(control(s,11,1),0.f,4.f),rampFrames);
-        const unsigned capacity=s.echo[0].size();
+        const unsigned capacity=s.echo[0].size();if(!capacity)return;
         for(unsigned long i=0;i<count;++i){const auto delay=std::clamp(unsigned(s.ramps[0].tick()*s.rate/1000),1u,capacity-1);const auto read=(s.echoPosition+capacity-delay)%capacity;const float reverbGain=s.ramps[1].tick(),delayGain=s.ramps[2].tick();
             const float feedback=.35f+.58f*s.ramps[3].tick(),damping=s.ramps[4].tick(),echoFeedback=s.ramps[5].tick();
             for(int channel=0;channel<2;++channel){const float input=finite(s.ports[channel][i]);float sum=0;
@@ -73,6 +83,10 @@ void run(LADSPA_Handle h,unsigned long count){
 
     }
 }
+// Drop every port pointer so a later run() is a no-op. The host may keep the instance alive
+// after deactivate(); without this, a flush during graph teardown reads buffers it no longer
+// owns (the State pointers stay non-null, so a plain null check cannot catch that).
+void deactivate(LADSPA_Handle h){if(h)static_cast<State*>(h)->ports={};}
 void cleanup(LADSPA_Handle h){delete static_cast<State*>(h);}
 const LADSPA_PortDescriptor gainPorts[]={9,10,5,5};
 const char* const gainNames[]={"In","Out","Mult","Add"};
@@ -87,10 +101,10 @@ const LADSPA_PortDescriptor fxPorts[]={9,9,9,9,10,10,5,5,5,5,5,5};
 const char* const fxNames[]={"Reverb L","Reverb R","Delay L","Delay R","Out L","Out R","Room","Damping","Delay ms","Feedback","Reverb return","Delay return"};
 const LADSPA_PortRangeHint fxHints[]={{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{0,0,0},{3,0,1},{3,0,.98},{3,1,2000},{3,0,.85},{3,0,4},{3,0,4}};
 const LADSPA_Descriptor descriptors[]={
- {49010,"smooth_gain",4,"Linux Mixer smooth gain","Linux Mixer","GPL-3.0-or-later",4,gainPorts,gainNames,gainHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,nullptr,cleanup},
- {49011,"smooth_mixer8",4,"Linux Mixer smooth mixer","Linux Mixer","GPL-3.0-or-later",17,mixPorts,mixNames,mixHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,nullptr,cleanup},
- {49012,"stereo_limiter",4,"Linux Mixer stereo peak limiter","Linux Mixer","GPL-3.0-or-later",5,limiterPorts,limiterNames,limiterHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,nullptr,cleanup},
- {49013,"stereo_fx",4,"Linux Mixer reverb and delay returns","Linux Mixer","GPL-3.0-or-later",12,fxPorts,fxNames,fxHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,nullptr,cleanup}
+ {49010,"smooth_gain",4,"Linux Mixer smooth gain","Linux Mixer","GPL-3.0-or-later",4,gainPorts,gainNames,gainHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,deactivate,cleanup},
+ {49011,"smooth_mixer8",4,"Linux Mixer smooth mixer","Linux Mixer","GPL-3.0-or-later",17,mixPorts,mixNames,mixHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,deactivate,cleanup},
+ {49012,"stereo_limiter",4,"Linux Mixer stereo peak limiter","Linux Mixer","GPL-3.0-or-later",5,limiterPorts,limiterNames,limiterHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,deactivate,cleanup},
+ {49013,"stereo_fx",4,"Linux Mixer reverb and delay returns","Linux Mixer","GPL-3.0-or-later",12,fxPorts,fxNames,fxHints,nullptr,instantiate,connectPort,activate,run,nullptr,nullptr,deactivate,cleanup}
 };
 }
 extern "C" const LADSPA_Descriptor* ladspa_descriptor(unsigned long index){return index<4?&descriptors[index]:nullptr;}

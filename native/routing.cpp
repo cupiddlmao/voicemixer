@@ -1,5 +1,6 @@
 #include "process_guard.h"
 #include "paths.h"
+#include "owned_processes.h"
 #include "routing.h"
 #include "hardware_links.h"
 #include "engine.h"
@@ -10,6 +11,7 @@
 #include <QtCore/QSaveFile>
 #include <QtCore/QTimer>
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QThread>
 #include <QtCore/QDateTime>
 #include <QtCore/QFileInfo>
 #include <algorithm>
@@ -46,11 +48,7 @@ RoutingMatrix::RoutingMatrix(Engine& e):QObject(&e),engine(e),runtime(stateRoot(
     connect(&appQuery,&QProcess::finished,this,[this](int code,QProcess::ExitStatus){if(code==0){const auto doc=QJsonDocument::fromJson(appQuery.readAllStandardOutput());if(doc.isArray())parseApps(doc.array());}});
 }
 RoutingMatrix::~RoutingMatrix(){shutdown();}
-qint64 RoutingMatrix::ownedPid()const{
-    QFile f(runtime+"/matrix.pid");if(!f.open(QIODevice::ReadOnly))return 0;bool ok=false;const auto pid=f.readAll().trimmed().toLongLong(&ok);if(!ok||pid<=1)return 0;
-    QFile cmd(QString("/proc/%1/cmdline").arg(pid));if(!cmd.open(QIODevice::ReadOnly))return 0;const auto args=cmd.readAll().split('\0');
-    return !args.empty()&&QFileInfo(QString::fromUtf8(args[0])).fileName()=="pipewire"&&args.contains((runtime+"/matrix.conf").toUtf8())?pid:0;
-}
+qint64 RoutingMatrix::ownedPid()const{return owned_processes::newest(runtime,"matrix");}
 QString RoutingMatrix::nodeForInput(int input)const{return virtualInputName(input);}
 void RoutingMatrix::queue(const QString& program,const QStringList& args,bool quiet){
     const QString key=program+'\n'+args.join('\n');if(queued.contains(key))return;
@@ -72,7 +70,7 @@ void RoutingMatrix::start(){
     config.write(QJsonDocument(matrixConfiguration(engine.settings.routing,"linux_mixer",&engine.settings.tape)).toJson());if(!config.commit()){failed=true;return;}
     QProcess p;p.setProgram("pipewire");p.setArguments({"-c",runtime+"/matrix.conf"});p.setStandardOutputFile(runtime+"/matrix.log");p.setStandardErrorFile(runtime+"/matrix.log",QIODevice::Append);
     qint64 pid=0;if(!p.startDetached(&pid)){failed=true;engine.message="Could not launch routing graph";return;}
-    QFile f(runtime+"/matrix.pid");if(f.open(QIODevice::WriteOnly))f.write(QByteArray::number(pid));starting=true;
+    owned_processes::record(runtime,"matrix",pid);starting=true;
     QTimer::singleShot(500,this,[this]{engine.refresh();});
     QTimer::singleShot(6000,this,[this]{if(starting&&!ready){starting=false;failed=true;engine.message="Routing graph failed; see .runtime/matrix.log";if(engine.changed)engine.changed();}});
 }
@@ -202,7 +200,14 @@ void RoutingMatrix::stop(){
     stopping=true;ready=false;starting=failed=false;dirty=false;commands.clear();queued.clear();
     if(worker.state()!=QProcess::NotRunning){worker.terminate();worker.waitForFinished(1000);}
     meters.stop();inputPeak.fill(-90);busPeak.fill(-90);engine.auxPeakDb=-90;
-    const auto pid=ownedPid();if(pid)kill(pid,SIGTERM);QFile::remove(runtime+"/matrix.pid");nodeIds.clear();ports.clear();links.clear();stopping=false;
+    // Terminate, wait, force-terminate and wait again, for every graph this state root launched.
+    // Its filter-chain data loop reads port buffers right up to the end of teardown, so returning
+    // while the old context was still being destroyed let the DSP run() touch already-unmapped
+    // buffers, and it let start() launch a new instance against a half-dead one. A graph that
+    // somehow survives stays recorded, so it blocks a relaunch instead of becoming an orphan.
+    const bool released=owned_processes::stopAll(runtime,"matrix");
+    if(!released){engine.message="Previous routing graph is still exiting; it will be reaped on the next stop";}
+    nodeIds.clear();ports.clear();links.clear();stopping=false;
 }
 void RoutingMatrix::shutdown(){
     meterTimer.stop();

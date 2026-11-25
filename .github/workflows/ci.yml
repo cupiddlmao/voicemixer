@@ -1,6 +1,9 @@
 name: CI
 on:
+  # A bare `push:` plus `pull_request:` runs every branch twice (once for the branch, once
+  # for the PR). main still gets a post-merge run, and open PRs are covered by pull_request.
   push:
+    branches: [main]
   pull_request:
 jobs:
   build-test:

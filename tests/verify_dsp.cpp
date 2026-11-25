@@ -31,5 +31,32 @@ int main(){
     fx->activate(f);room=0;damping=0;feedback=0;verbReturn=1;delayReturn=1;fx->run(f,1);
     room=1;damping=.9f;feedback=.85f;fx->run(f,2400);fx->run(f,48000);for(float v:wetL)assert(std::isfinite(v));
     fx->cleanup(f);
-    std::cout<<"PASS: 10 ms gain/send fades, interrupted fades, linked stereo limiting, -1 dBFS ceiling non-finite protection, exact echo timing/feedback, reverb tail and stereo separation.\n";
+    // Regression: during graph teardown the port buffers are already unmapped, so a flush that
+    // arrives with zero frames, or after deactivate(), must never touch them. The old code read
+    // them unconditionally (a segfault in pipewire's data-loop thread), and kinds 0/2/3
+    // dereferenced their ports with no null check at all.
+    {
+        const auto* md=ladspa_descriptor(1);auto handle=md->instantiate(md,48000);assert(handle);
+        assert(md->deactivate&&"deactivate must be wired so teardown drops the port pointers");
+        std::array<float,8> sends{};for(int c=0;c<8;++c)sends[c]=1;
+        std::vector<float> source(256,.25f),out2(256);
+        for(int c=0;c<8;++c)md->connect_port(handle,c,source.data());
+        for(int c=0;c<8;++c)md->connect_port(handle,9+c,&sends[c]);
+        md->connect_port(handle,8,out2.data());md->activate(handle);
+        std::fill(out2.begin(),out2.end(),-123.f);
+        md->run(handle,0);for(float v:out2)assert(v==-123.f); // zero frames: nothing written
+        md->deactivate(handle);md->run(handle,0);md->run(handle,256); // stray flush after teardown
+        for(float v:out2)assert(v==-123.f);
+        assert(std::all_of(source.begin(),source.end(),[](float v){return v==.25f;}));
+        md->cleanup(handle);
+        // No port connected at all: the guard must refuse, not dereference null.
+        for(int index=0;index<4;++index){
+            const auto* d=ladspa_descriptor(index);auto h=d->instantiate(d,48000);
+            if(!h)continue;
+            d->activate(h);d->run(h,0);d->run(h,64);
+            if(d->deactivate)d->deactivate(h);
+            d->run(h,64);d->cleanup(h);
+        }
+    }
+    std::cout<<"PASS: 10 ms gain/send fades, interrupted fades, linked stereo limiting, -1 dBFS ceiling non-finite protection, exact echo timing/feedback, reverb tail and stereo separation, zero-frame and post-deactivate flushes inert, unconnected ports refused.\n";
 }
