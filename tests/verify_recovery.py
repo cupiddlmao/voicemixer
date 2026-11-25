@@ -21,14 +21,26 @@ def wait(predicate,label):
 def graph():return json.loads(subprocess.check_output(['pw-dump'],timeout=4))
 def props(n):return n.get('info',{}).get('props',{})
 def nodes():return {props(n).get('node.name'):n for n in graph() if n.get('type')=='PipeWire:Interface:Node'}
+def pids(kind):
+    # The ledger can name more than one graph: a predecessor that was still exiting when it
+    # was replaced. Oldest first, exactly as recorded.
+    try:return [int(t) for t in (ROOT/f'.runtime/{kind}.pid').read_text().split()]
+    except (FileNotFoundError,ValueError):return []
 def pid(kind):
-    try:return int((ROOT/f'.runtime/{kind}.pid').read_text())
-    except (FileNotFoundError,ValueError):return 0
+    living=[number for number in pids(kind) if Path(f'/proc/{number}/cmdline').exists()]
+    return living[-1] if living else 0
 def terminate(kind):
-    number=pid(kind);cmd=Path(f'/proc/{number}/cmdline').read_bytes().split(b'\0')
+    # Kill every recorded graph, so a leaked predecessor cannot survive the recovery test.
     conf='microphone' if kind=='engine' else 'matrix'
-    assert Path(os.fsdecode(cmd[0])).name=='pipewire' and str(ROOT/f'.runtime/{conf}.conf').encode() in cmd
-    os.kill(number,signal.SIGKILL);return number
+    killed=0
+    for number in pids(kind):
+        try:cmd=Path(f'/proc/{number}/cmdline').read_bytes().split(b'\0')
+        except (FileNotFoundError,ProcessLookupError):continue
+        assert Path(os.fsdecode(cmd[0])).name=='pipewire' and str(ROOT/f'.runtime/{conf}.conf').encode() in cmd
+        try:os.kill(number,signal.SIGKILL)
+        except ProcessLookupError:continue
+        killed=number
+    return killed
 
 before=json.loads((ROOT/'settings.json').read_text())
 assert before.get('engineEnabled'), 'Run the mixer controller and engine first'

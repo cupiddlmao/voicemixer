@@ -204,10 +204,12 @@ def main():
             print('PASS: private-server UI checks, plugin heartbeat, frozen-host detection, normal routing recovery, no automatic crash loop, clean shutdown. Desktop audio was untouched.')
         finally:
             for kind in ('engine','matrix'):
-                try:
-                    pid=int((state/f'.runtime/{kind}.pid').read_text())
-                    if str(state).encode() in Path(f'/proc/{pid}/cmdline').read_bytes():os.kill(pid,signal.SIGTERM)
-                except (FileNotFoundError,ProcessLookupError):pass
+                try:numbers=[int(t) for t in (state/f'.runtime/{kind}.pid').read_text().split()]
+                except (FileNotFoundError,ValueError):numbers=[]
+                for pid in numbers:
+                    try:
+                        if str(state).encode() in Path(f'/proc/{pid}/cmdline').read_bytes():os.kill(pid,signal.SIGTERM)
+                    except (FileNotFoundError,ProcessLookupError):pass
             for p in reversed(processes):
                 if p.poll() is None:p.terminate()
             for p in reversed(processes):
