@@ -89,7 +89,7 @@ void Console::recorderOptions(){
         const int count=post.isChecked()&&format.currentText()!="MP3"?channels.currentIndex()+1:2;
         if(count>2&&!e.settings.routing.busComposite[bus.currentIndex()]){QMessageBox::information(&dialog,"Composite bus required","Set this bus to Composite in its master mode menu before recording more than two channels.");return;}
         s.busMode=post.isChecked();s.bus=bus.currentIndex();s.channels=count;s.directory=directory.text();s.prefix=prefix.text();s.format=format.currentText();s.rate=rate.currentText().toInt();s.bits=bits.currentData().toInt();s.kbps=bitrate.value();s.bufferSeconds=buffer.value();s.preSeconds=preRoll.value();s.multitrack=multi.isChecked();s.playOnLoad=autoplay.isChecked();s.loop=loop.isChecked();s.gain=gain.value();s.stopAfter=QTime(0,0).secsTo(stopAfter.time());for(int i=0;i<8;++i)s.armed[i]=armed[i]->isChecked();recorder.configure();e.apply();dialog.accept();
-    });ui::grabForTest(&dialog,"recorder-options");dialog.exec();
+    });dialog.exec();
 }
 void Console::busOptions(int index){
     if(e.recorder->recording||e.recorder->finalizing){QMessageBox::information(this,"Bus mode","Stop recording before changing bus topology.");return;}
@@ -104,7 +104,6 @@ void Console::busOptions(int index){
     QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
     ui::primary(buttons.button(QDialogButtonBox::Ok));
     form.addRow(&buttons);connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    ui::grabForTest(&dialog,"bus-options");
     if(dialog.exec()==QDialog::Accepted){bool changed=state.busComposite[index]!=composite.isChecked();state.busComposite[index]=composite.isChecked();changed=changed||state.busCompositePost[index]!=post.isChecked();state.busCompositePost[index]=post.isChecked();for(int c=0;c<8;++c){changed=changed||state.compositePatch[index][c]!=patches[c]->currentIndex();state.compositePatch[index][c]=patches[c]->currentIndex();}e.save();if(changed)e.start();}
 }
 void Console::fxOptions(int effect){
@@ -123,6 +122,5 @@ void Console::fxOptions(int effect){
     QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
     ui::primary(buttons.button(QDialogButtonBox::Ok));
     form.addRow(&buttons);connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    ui::grabForTest(&dialog,"fx-options");
     if(dialog.exec()==QDialog::Accepted){if(effect==0){s.reverbEnabled=enabled.isChecked();s.room=first.value();s.damping=second.value();}else{s.delayEnabled=enabled.isChecked();s.delayMs=first.value();s.feedback=second.value();}for(int b=0;b<8;++b)(effect==0?s.reverbReturn[b]:s.delayReturn[b])=returns[b]->value()/100;e.apply();}
 }

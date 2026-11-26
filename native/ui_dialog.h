@@ -20,8 +20,6 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QPushButton>
-#include <QtCore/QDir>
-#include <QtCore/qglobal.h>
 
 namespace ui {
 
@@ -95,12 +93,10 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QTimeEdit, QAbstractSpinBox {
     background-color: #1c2833; color: #e8eff3; border: 1px solid #2d3e4b;
     border-radius: 4px; padding: 3px 6px; min-height: 20px;
     selection-background-color: #2f5a48; selection-color: #e8eff3; }
-// Fusion draws no arrow once the spin box is styled, so the stepper is drawn
-// with borders: a 14px column with a triangle in each half.
-// A stylesheet replaces Fusion's spin arrows with nothing, and Qt cannot draw
-// them from CSS borders alone. Rather than ship a stepper column with no
-// glyph in it, the buttons are folded away and the field reads as a plain
-// numeric entry: typing, arrow keys and the wheel still change the value.
+/* A stylesheet replaces Fusion's spin arrows with nothing, and Qt cannot draw
+   them from CSS borders alone. Rather than ship a stepper column with no glyph
+   in it, the buttons are folded away and the field reads as a plain numeric
+   entry: typing, arrow keys and the wheel still change the value. */
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 0; border: none; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTimeEdit:focus { border-color: #6fd3a8; }
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QTimeEdit:disabled { color: #6b7f8c; }
@@ -296,15 +292,5 @@ inline QPushButton* primary(QPushButton* button) {
 
 // Colour-carries-meaning hook for wording that is about arming or recording.
 inline void setWarnTone(QWidget* widget) { widget->setProperty("uiTone", "warn"); }
-
-// TEMPORARY CAPTURE SCAFFOLDING — DELETE before the final commit.
-// Photographs a dialog synchronously; nothing calls it once it is removed.
-inline void grabForTest(QWidget* dialog, const QString& name) {
-    const QString out = qEnvironmentVariable("LINUX_MIXER_UI_TEST_OUTPUT");
-    if (out.isEmpty() || !dialog) return;
-    QDir().mkpath(out);
-    dialog->show();
-    dialog->grab().save(out + "/" + name + ".png");
-}
 
 } // namespace ui

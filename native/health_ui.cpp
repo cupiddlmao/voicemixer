@@ -189,33 +189,8 @@ void runHealthUiTest(QApplication& app,Console& console){
             }
             QTextStream(stderr)<<"FAIL: missing dialog "<<title<<'\n';QApplication::exit(1);
         };
-        QTimer::singleShot(2000,&console,[capture]{capture("Audio health","audio-health.png");});
-        // TEMPORARY CAPTURE SCAFFOLDING: fake graph so the populated state can
-        // be photographed on a machine with no PipeWire. DELETE before commit.
-        if(!qEnvironmentVariableIsEmpty("LINUX_MIXER_UI_TEST_FAKE")){
-            auto& health=*console.e.health;
-            health.available=true;health.status="Audio statistics live";health.errors=4;health.quantum=1024;health.rate=48000;health.periodMs=21.3333;health.load=0.114;
-            health.nodes={
-                {1,1024,48000,0,0,0.021,"pipewire","R",true},
-                {2,1024,48000,0,0,0.008,"wireplumber","R",true},
-                {3,1024,48000,4,4,0.114,"alsa_output.pci-0000_00_1f.3.analog-stereo","R",true},
-                {4,1024,48000,0,0,0.045,"alsa_input.usb-Behringer_UCA202","R",true},
-                {5,1024,48000,0,0,0.003,"Firefox","T",false},
-                {6,1024,48000,0,0,-1,"mpd","S",false},
-                {7,1024,48000,0,0,0.0,"input-alsa-spdif","X",true},
-            };
-        }
-        console.audioHealth();
+        QTimer::singleShot(2000,&console,[capture]{capture("Audio health","audio-health.png");});console.audioHealth();
         QTimer::singleShot(300,&console,[capture]{capture("Voicemixer updates","updates.png");});console.updates->showDialog(&console);
-        // TEMPORARY CAPTURE SCAFFOLDING: the recorder dialogs have no hook, so
-        // open each one, let grabForTest photograph it, then dismiss it.
-        // DELETE before commit.
-        if(!qEnvironmentVariableIsEmpty("LINUX_MIXER_UI_TEST_OUTPUT")){
-            const auto dismiss=[](){for(auto* w:QApplication::topLevelWidgets())if(auto* d=qobject_cast<QDialog*>(w);d&&d->isVisible())d->reject();};
-            QTimer::singleShot(80,&console,dismiss);console.recorderOptions();
-            QTimer::singleShot(80,&console,dismiss);console.busOptions(0);
-            QTimer::singleShot(80,&console,dismiss);console.fxOptions(0);
-        }
         QTextStream(stdout)<<"PASS: audio health and update dialogs opened and closed without network requests.\n";app.quit();
     });
 }

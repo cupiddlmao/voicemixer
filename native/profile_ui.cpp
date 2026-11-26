@@ -130,13 +130,6 @@ bool reviewProfile(ProfileBundle& profile,const Settings& current,const QList<De
     QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
     ui::primary(buttons.button(QDialogButtonBox::Ok));
     layout.addWidget(&buttons);QObject::connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);QObject::connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
-    // TEMPORARY CAPTURE SCAFFOLDING: photograph the review dialog, which has
-    // no hook of its own. Render synchronously so the test's instant accept
-    // cannot race it. DELETE before commit.
-    if(const QString shots=qEnvironmentVariable("LINUX_MIXER_UI_TEST_OUTPUT");!shots.isEmpty()){
-        static int take=0;
-        QDir().mkpath(shots);dialog.show();dialog.grab().save(shots+QString("/profile-restore-%1.png").arg(++take));
-    }
     const bool accepted=dialog.exec()==QDialog::Accepted;
     // content is a stack widget; detach it before the scroll area destroys it.
     scroll.takeWidget();if(!accepted)return false;
