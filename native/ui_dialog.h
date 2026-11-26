@@ -94,9 +94,13 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QTimeEdit, QAbstractSpinBox {
     border-radius: 4px; padding: 3px 6px; min-height: 20px;
     selection-background-color: #2f5a48; selection-color: #e8eff3; }
 /* A stylesheet replaces Fusion's spin arrows with nothing, and Qt cannot draw
-   them from CSS borders alone. Rather than ship a stepper column with no glyph
-   in it, the buttons are folded away and the field reads as a plain numeric
-   entry: typing, arrow keys and the wheel still change the value. */
+   them from CSS borders alone. Verified 2026-11-26 by rendering a styled
+   QSpinBox two ways: sub-control rule deleted (leaves an empty button well that
+   reads as part of the field) and ::up-arrow/::down-arrow built from
+   transparent CSS borders (renders nothing). Real arrows would need image:
+   url() from a .qrc resource, i.e. a build-system change for one affordance, so
+   the buttons stay folded away and the field reads as a plain numeric entry.
+   Typing, the arrow keys and the wheel still change the value. */
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 0; border: none; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTimeEdit:focus { border-color: #6fd3a8; }
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QTimeEdit:disabled { color: #6b7f8c; }
