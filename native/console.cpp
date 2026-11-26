@@ -23,20 +23,26 @@
 #include <cmath>
 
 #include "ui_theme.h"
-#include <QtGui/QPainterPath>
 #include <chrono>
 namespace {
 using namespace theme;
 constexpr double W=1480,H=720;
-// Shared geometry: paint code and hit-testing/drag code both read these.
+// Shared geometry: paint code and hit-testing/drag code both read these, so a
+// control cannot move visually without moving its grab region with it.
 constexpr double page=16,pitch=129,stripW=117,top=52,stripH=624;
 constexpr double padTop=top+82,padW=101,padH=88,padInX=12,padInY=14;       // IntelliPan / EQ block
 constexpr double gainTop=top+392,gainH=190,capH=36;                       // strip fader zone
-constexpr double masterX=1048,masterW=416,mfTop=504,mfH=136;              // master fader zone
-constexpr double seekX=1056,seekW=196,tapeY=138;
+constexpr double masterX=1048,masterW=416,mfTop=506,mfH=138;              // master fader zone
+constexpr double seekX=1056,seekW=196,tapeY=142,tapeW=262,tapeH=144;      // tape block
+constexpr double fxX=masterX+274,fxW=142;                                // special FX block
+constexpr double busPitch=50,busCol=46,busTop=326;                        // master section columns
 double stripX(int i){return page+i*pitch;}
 QRectF padRect(int i){return {stripX(i)+8,padTop,padW,padH};}
 QRectF padInner(int i){const auto r=padRect(i);return r.adjusted(padInX,padInY,-padInX,-padInY);}
+// Three-up compact knobs (EQ bands, FX sends): 30px on a 35px pitch fills the
+// 101px content column of a strip exactly, so both strip kinds agree on x.
+constexpr double triplePitch=35;
+double tripleX(int i,int k){return stripX(i)+8+knobCompact/2+k*triplePitch;}
 double faderDb(double y,double zoneTop,double zoneH){return 12-std::clamp((y-(zoneTop+capH/2))/(zoneH-capH),0.,1.)*72;}
 QPointF g_hover(-1,-1),g_press(-1,-1);
 double scaleOf(QPainter& p){const auto t=p.worldTransform();return std::min(t.m11(),t.m22());}
@@ -108,10 +114,10 @@ void fader(QPainter& p,QRectF r,double value,bool live,bool drawScale=true,QColo
     for(int db:{0,-24,-48}) {
         const double y=r.y()+capH/2+(12-db)/72.*(r.height()-capH);
         p.setPen(QPen(borderStrong,1));p.drawLine(QPointF(cx-18,y),QPointF(cx-14,y));
-        if(drawScale)text(p,QRectF(r.x()-6,y-7,cx-20-r.x(),14),QString::number(db),type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
+        if(drawScale)text(p,QRectF(r.x()-4,y-7,24,14),QString::number(db),type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     }
     const QRectF cap(cx-13,yy-capH/2,26,capH);
-    panelBox(p,cap,panelRaised,live?tone:borderStrong,controlRadius);
+    panelBox(p,cap,panelRaised.lighter(118),live?tone:borderStrong,controlRadius);
     p.setPen(QPen(borderStrong,1));p.drawLine(QPointF(cx-8,yy-3),QPointF(cx+8,yy-3));p.drawLine(QPointF(cx-8,yy+3),QPointF(cx+8,yy+3));
 }
 }
@@ -174,9 +180,11 @@ void Console::strip(QPainter& p,int index,bool hardware) {
     // device chip
     const QRectF chip(x+8,y+28,101,rowHeight);
     const bool unset=live&&s.mic.isEmpty();
-    QString name="Select microphone";
+    QString name="Select mic";
     if(live) {if(!unset)name=s.mic;for(const auto& d:e.devices)if(d.name==s.mic)name=d.description;}
-    else name=virtualInputDescription(vi);
+    // The node description is "Linux Mixer System"; the strip caption already says
+    // VIRTUAL n, so the chip shows the word that actually differs.
+    else name=QString(virtualInputDescription(vi)).section(' ',1);
     if(unset)dashedBox(p,chip);else{panelBox(p,chip,panelRaised,chip.contains(g_hover)?borderStrong:border,controlRadius);}
     text(p,chip.adjusted(8,0,-8,0),elide(name,type::value,chip.width()-16),type::value,unset?inkMuted:ink);
     if(live)add(chip,Mic,"Select physical microphone or interface channel. Changing devices restarts the engine.",index);
@@ -198,9 +206,8 @@ void Console::strip(QPainter& p,int index,bool hardware) {
         if(live)add(pad,Color,s.positionPanel?"Drag to position this input: left/right pans, up/down moves it front (louder, closer) or back (quieter, more reverb). Double-click to center. Right-click for Color Panel.":"Drag to shape warmth, brightness and presence. Double-click to reset. Right-click for left/right position.",index);
     } else {
         caption(p,{x+8,y+62,stripW-16,16},"Equalizer");
-        const double cx0=x+(stripW-108)/2+18;
-        for(int k=0;k<3;++k)text(p,{cx0+k*36-18,y+82,36,14},QStringList{"Treble","Mid","Bass"}[k],type::micro,inkSecondary,Qt::AlignCenter);
-        for(int k=0;k<6;++k){const QPointF center(cx0+(k%3)*36,y+(k<3?114:154));const double value=routing.eq[vi][k];knob(p,center,knobCompact,(value+12)/24,QString::number(value,'f',value==std::floor(value)?0:1),true,true);add({center.x()-16,center.y()-16,32,32},Eq,QString("%1 channel %2 EQ gain (dB); double-click for flat").arg(k<3?"Left":"Right",QStringList{"Treble","Mid","Bass"}[k%3]),vi,k);}
+        for(int k=0;k<3;++k)text(p,{tripleX(index,k)-triplePitch/2,y+82,triplePitch,14},QStringList{"Treble","Mid","Bass"}[k],type::micro,inkSecondary,Qt::AlignCenter);
+        for(int k=0;k<6;++k){const QPointF center{tripleX(index,k%3),y+(k<3?114:154)};const double value=routing.eq[vi][k];knob(p,center,knobCompact,(value+12)/24,QString::number(value,'f',value==std::floor(value)?0:1),true,true);add({center.x()-16,center.y()-16,32,32},Eq,QString("%1 channel %2 EQ gain (dB); double-click for flat").arg(k<3?"Left":"Right",QStringList{"Treble","Mid","Bass"}[k%3]),vi,k);}
     }
     if(virtualInput){
         caption(p,{x+8,y+178,stripW-16,16},"Applications");
@@ -210,31 +217,32 @@ void Console::strip(QPainter& p,int index,bool hardware) {
             const QRectF r(x+8,y+196+row*22,101,20);button(p,r,elide(app.name,type::value,90));add(r,Apps,"Change app assignments",vi);++row;
         }
         if(row==0){const QRectF r(x+8,y+196,101,84);dashedBox(p,r);
-            text(p,{r.x(),r.y()+24,r.width(),18},"No apps",type::value,inkSecondary,Qt::AlignCenter);text(p,{r.x(),r.y()+42,r.width(),14},"Click input name",type::micro,inkMuted,Qt::AlignCenter);}
+            text(p,{r.x(),r.y()+20,r.width(),18},"No apps",type::value,inkSecondary,Qt::AlignCenter);text(p,{r.x(),r.y()+40,r.width(),14},"Click input name",type::micro,inkMuted,Qt::AlignCenter);}
     }
     if(hardware) {
         caption(p,{x+8,y+178,stripW-16,16},"Dynamics");
         text(p,{x+8,y+194,50,14},"Comp",type::value,inkSecondary,Qt::AlignCenter);text(p,{x+59,y+194,50,14},"Gate",type::value,inkSecondary,Qt::AlignCenter);
-        knob(p,{x+33,y+232},knob,s.compression/10,QString::number(s.compression,'f',1),live);
-        knob(p,{x+84,y+232},knob,(s.threshold+60)/60,QString::number(s.threshold,'f',0),live);
+        knob(p,{x+33,y+232},knobSize,s.compression/10,QString::number(s.compression,'f',1),live);
+        knob(p,{x+84,y+232},knobSize,(s.threshold+60)/60,QString::number(s.threshold,'f',0),live);
         add({x+11,y+210,44,44},Comp,"Compressor amount. Drag vertically or use mouse wheel.",index);add({x+62,y+210,44,44},Gate,"Gate threshold in dB. Right-click for attack/release timing.",index);
-        button(p,{x+8,y+260,49,22},"RNNoise",s.denoise,live);button(p,{x+60,y+260,49,22},"Bypass",s.bypass,live,type::value,warn);
+        button(p,{x+8,y+260,49,22},"Denoise",s.denoise,live,type::micro);button(p,{x+60,y+260,49,22},"Bypass",s.bypass,live,type::micro,warn);
         add({x+8,y+260,49,22},Denoise,"Toggle RNNoise noise suppression live",index);add({x+60,y+260,49,22},Bypass,"Bypass denoise, gate, compressor and color. Fader and mute stay active.",index);
     }
     {const QRectF r(x+8,y+288,101,24);button(p,r,e.plugins->hasFailed(index)?"FX error":"Plugins",e.plugins->running(index),true,type::value,e.plugins->hasFailed(index)?danger:accent);add(r,Plugins,"Show or hide this input’s VST3/LADSPA plugin rack without stopping effects; right-click to bypass the rack (Windows VST3 via yabridge)",index);}
-    {const double cx0=x+(stripW-108)/2+18;
-    for(int k=0;k<3;++k){text(p,{cx0+k*36-18,y+318,36,14},QStringList{"Reverb","FX","Delay"}[k],type::micro,inkSecondary,Qt::AlignCenter);
-        const double value=k==0?routing.reverbSend[index]:k==1?routing.fxAmount[index]:routing.delaySend[index];knob(p,{cx0+k*36,y+350},knobCompact,value,QString::number(value*100,'f',0),true);add({cx0+k*36-16,y+334,32,32},FxSend,k==0?"Reverb send (%)":k==1?"FX send level (%)":"Delay send (%)",index,k);}}
-    // fader zone
+    {for(int k=0;k<3;++k){const double cx=tripleX(index,k);
+    text(p,{cx-triplePitch/2,y+318,triplePitch,14},QStringList{"Reverb","FX","Delay"}[k],type::micro,inkSecondary,Qt::AlignCenter);
+        const double value=k==0?routing.reverbSend[index]:k==1?routing.fxAmount[index]:routing.delaySend[index];knob(p,{cx,y+350},knobCompact,value,QString::number(value*100,'f',0),true);add({cx-16,y+334,32,32},FxSend,k==0?"Reverb send (%)":k==1?"FX send level (%)":"Delay send (%)",index,k);}}
+    // fader zone: one rect feeds the painter, the scale labels and the grab region
+    const QRectF faderR(x+14,gainTop,80,gainH),grab(faderR.center().x()-20,gainTop-8,40,gainH+16);
     const double gain=live?s.gain:virtualInput?routing.inputGain[vi]:0;
     meter(p,{x+8,gainTop,4,gainH},live?e.hardwarePeak[index]:virtualInput?e.matrix->inputPeak[vi]:-90,live?e.running:virtualInput && e.matrix->ready,index);
-    fader(p,{x+14,gainTop,80,gainH},gain,usable);
+    fader(p,faderR,gain,usable);
     text(p,{x+8,y+372,50,16},gain<=-60?"−∞ dB":QString::number(gain,'f',gain==std::floor(gain)?0:1)+" dB",type::value,ink);
     if(live&&s.mic.isEmpty())text(p,{x+50,y+372,59,16},"No input",type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     else if(live)text(p,{x+50,y+372,59,16},e.hardwarePeak[index]>=-.1?"CLIP":QString::number(e.hardwarePeak[index],'f',1)+" dBFS",type::micro,e.hardwarePeak[index]>=-.1?danger:inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     else text(p,{x+50,y+372,59,16},e.matrix->ready?"App level":"Engine off",type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
-    if(live)add({x+34,gainTop-8,40,gainH+16},Gain,"Microphone gain in dB. Double-click for 0 dB.",index);
-    if(virtualInput)add({x+34,gainTop-8,40,gainH+16},VirtualGain,"App playback level. Double-click for 0 dB.",vi);
+    if(live)add(grab,Gain,"Microphone gain in dB. Double-click for 0 dB.",index);
+    if(virtualInput)add(grab,VirtualGain,"App playback level. Double-click for 0 dB.",vi);
     for(int b=0;b<8;++b) {
         const int inputRow=index;const bool active=routing.routes[inputRow][b];
         const QString label=b<5?QString("A%1").arg(b+1):QString("B%1").arg(b-4);
@@ -251,18 +259,18 @@ void Console::strip(QPainter& p,int index,bool hardware) {
 }
 void Console::masters(QPainter& p) {
     const double x=masterX,y=top;
-    caption(p,{x,y,300,16},"Hardware out",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
+    caption(p,{x,y+8,masterW,16},"Hardware out",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
     QString output=e.settings.routing.outputs[0].isEmpty()?"Select headphone output":e.settings.routing.outputs[0];
     for(const auto& d:e.devices)if(d.name==e.settings.routing.outputs[0])output=d.description;
-    const QRectF a1(x,y+20,masterW,rowHeight);const bool a1set=!e.settings.routing.outputs[0].isEmpty();
+    const QRectF a1(x,y+28,masterW,rowHeight);const bool a1set=!e.settings.routing.outputs[0].isEmpty();
     if(a1set)panelBox(p,a1,panelRaised,a1.contains(g_hover)?borderStrong:border,controlRadius);else dashedBox(p,a1);
     text(p,{x+8,a1.y(),28,rowHeight},"A1",type::value,a1set?accent:inkMuted,Qt::AlignLeft|Qt::AlignVCenter,true);
     text(p,{x+36,a1.y(),masterW-44,rowHeight},elide(output,type::value,masterW-52),type::value,a1set?ink:inkMuted);
     add(a1,Output,"Choose the output connected to your headphones. Does not enable monitoring.");
-    for(int i=0;i<4;++i){const bool selected=!e.settings.routing.outputs[i+1].isEmpty();const QRectF r(x+i*106,y+56,98,routeHeight);button(p,r,QString("A%1 · %2").arg(i+2).arg(selected?"Selected":"Select"),selected);add(r,Output,QString("Select hardware output A%1").arg(i+2),i+1);}
+    for(int i=0;i<4;++i){const bool selected=!e.settings.routing.outputs[i+1].isEmpty();const QRectF r(x+i*107,y+60,95,routeHeight);button(p,r,QString("A%1 · %2").arg(i+2).arg(selected?"Selected":"Select"),selected);add(r,Output,QString("Select hardware output A%1").arg(i+2),i+1);}
     // Tape / player
     const auto& tape=*e.recorder;const auto& options=e.settings.tape;
-    panelBox(p,{x,tapeY,262,148});
+    panelBox(p,{x,tapeY,tapeW,tapeH});
     const QRectF file(x+8,tapeY+8,246,32);
     const bool hasFile=tape.recording||tape.finalizing||!tape.file.isEmpty();
     const QString title=tape.recording||tape.finalizing?QFileInfo(tape.recordFile).fileName():QFileInfo(tape.file).fileName();
@@ -273,45 +281,47 @@ void Console::masters(QPainter& p) {
     else{dashedBox(p,file);text(p,{file.x()+8,file.y()+2,file.width()-16,15},"Load audio file",type::value,inkSecondary);text(p,{file.x()+8,file.y()+17,file.width()-16,13},"Right-click for recording options",type::micro,inkMuted);}
     add(file,TapeLoad,"Load a media file; right-click anywhere on the tape for recording options");
     auto time=[](double seconds){int t=std::max(0,int(seconds));return QString("%1:%2:%3").arg(t/3600,2,10,QChar('0')).arg(t/60%60,2,10,QChar('0')).arg(t%60,2,10,QChar('0'));};
-    text(p,{x+8,tapeY+46,86,20},time(tape.position),type::label,tape.recording?warn:ink,Qt::AlignLeft|Qt::AlignVCenter,true);
-    {const QRectF m(x+98,tapeY+54,64,4);meter(p,m.adjusted(0,0,0,0),-90,false,16);
+    text(p,{x+8,tapeY+44,86,20},time(tape.position),type::label,tape.recording?warn:ink,Qt::AlignLeft|Qt::AlignVCenter,true);
+    {const QRectF m(x+98,tapeY+52,64,4);meter(p,m,-90,false,16);
      const double level=std::clamp((tape.peak+60)/60.,0.,1.);p.fillRect(QRectF(m.x(),m.y(),m.width()*level,4),tape.peak>=-3?danger:accent);}
-    text(p,{x+166,tapeY+46,38,20},options.busMode?(options.bus<5?QString("A%1").arg(options.bus+1):QString("B%1").arg(options.bus-4)):"Input",type::value,warn,Qt::AlignRight|Qt::AlignVCenter);
-    const QRectF bar(seekX,tapeY+72,seekW,6);p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(bar,3,3);
+    text(p,{x+166,tapeY+44,38,20},options.busMode?(options.bus<5?QString("A%1").arg(options.bus+1):QString("B%1").arg(options.bus-4)):"Input",type::value,inkSecondary,Qt::AlignRight|Qt::AlignVCenter);
+    const QRectF bar(seekX,tapeY+68,seekW,6);p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(bar,3,3);
     const double progress=tape.duration>0?std::clamp(tape.position/tape.duration,0.,1.):0;p.setBrush(accent);p.drawRoundedRect(QRectF(bar.x(),bar.y(),std::max(progress>0?6.:0.,bar.width()*progress),6),3,3);
-    add({seekX,tapeY+68,seekW,14},TapeSeek,"Click to seek within the loaded file");
-    text(p,{seekX,tapeY+84,seekW,14},tape.error.isEmpty()?QString("%1 Hz · %2 ch · %3 %4").arg(options.rate).arg(options.busMode?options.channels:2).arg(options.format,time(tape.duration)):elide(tape.error,type::micro,seekW),type::micro,tape.error.isEmpty()?inkMuted:danger,Qt::AlignLeft|Qt::AlignVCenter);
-    for(int i=0;i<5;++i){const QRectF r(seekX+i*40,tapeY+102,36,36);const bool enabled=i!=4||tape.inputReady||tape.recording;
+    add({seekX,tapeY+64,seekW,14},TapeSeek,"Click to seek within the loaded file");
+    text(p,{seekX,tapeY+78,seekW,14},tape.error.isEmpty()?QString("%1 Hz · %2 ch · %3 %4").arg(options.rate).arg(options.busMode?options.channels:2).arg(options.format,time(tape.duration)):elide(tape.error,type::micro,seekW),type::micro,tape.error.isEmpty()?inkMuted:danger,Qt::AlignLeft|Qt::AlignVCenter);
+    for(int i=0;i<5;++i){const QRectF r(seekX+i*40,tapeY+98,36,36);const bool enabled=i!=4||tape.inputReady||tape.recording;
         button(p,r,(i==2&&tape.playing&&!tape.playPaused)||(i==4&&tape.recording&&!tape.recordPaused)?"Ⅱ":QStringList{"◀◀","▶▶","▶","■","●"}[i],i==2?tape.playing:i==4?tape.recording:false,enabled,type::value,i==4?warn:accent);
         if(i==4&&enabled&&!tape.recording){p.setPen(Qt::NoPen);p.setBrush(warn);p.drawEllipse(r.center(),1.5,1.5);}
         if(enabled)add(r,TapeTransport,QStringList{"Rewind (hold)","Fast forward (hold)","Play / pause","Stop playback / finalize recording","Record / pause recording in the same file"}[i],i);}
-    for(int bus=0;bus<8;++bus){const QRectF r(x+210+(bus/4)*23,tapeY+46+(bus%4)*22,21,18);button(p,r,bus<5?QString("A%1").arg(bus+1):QString("B%1").arg(bus-4),options.playback[bus],true,type::micro);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
+    for(int bus=0;bus<8;++bus){const QRectF r(x+210+(bus/4)*23,tapeY+44+(bus%4)*22,21,18);button(p,r,bus<5?QString("A%1").arg(bus+1):QString("B%1").arg(bus-4),options.playback[bus],true,type::micro);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
     // Special FX
-    const double fx=x+274;panelBox(p,{fx,tapeY,142,148});caption(p,{fx+8,tapeY+8,126,16},"Special FX");
-    const QRectF rev(fx+8,tapeY+30,126,rowHeight),del(fx+8,tapeY+66,126,rowHeight);
+    const double fx=fxX;panelBox(p,{fx,tapeY,fxW,tapeH});caption(p,{fx+8,tapeY+8,fxW-16,16},"Special FX");
+    const QRectF rev(fx+8,tapeY+30,fxW-16,rowHeight),del(fx+8,tapeY+66,fxW-16,rowHeight);
     button(p,rev,"Reverb",e.settings.routing.reverbEnabled);button(p,del,"Delay",e.settings.routing.delayEnabled);
     add(rev,FxOptions,"Reverb parameters and per-bus returns",0);add(del,FxOptions,"Delay time, feedback and per-bus returns",1);
-    text(p,{fx+8,tapeY+102,126,36},"Click an effect to configure its bus returns",type::micro,inkMuted,Qt::AlignLeft|Qt::AlignTop);
+    text(p,{fx+8,tapeY+96,fxW-16,36},"Click an effect to configure its bus returns",type::micro,inkMuted,Qt::AlignLeft|Qt::AlignTop|Qt::TextWordWrap);
     // Master section
-    caption(p,{x,298,300,16},"Master section",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
+    caption(p,{x,298,masterW,16},"Master section",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
     panelBox(p,{x,316,masterW,360});
     for(int i=0;i<8;++i) {
-        const double xx=x+8+i*50;const QString label=i<5?QString("A%1").arg(i+1):QString("B%1").arg(i-4);
+        const double xx=x+10+i*busPitch;const QString label=i<5?QString("A%1").arg(i+1):QString("B%1").arg(i-4);
         const QColor tone=i<5?accent:warn;const auto& r=e.settings.routing;
-        text(p,{xx,324,46,20},label,type::label,tone,Qt::AlignCenter,true);
-        p.fillRect(QRectF(xx+10,346,26,2),tone);
-        const QRectF mode(xx,352,46,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"Stereo",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
-        text(p,{xx,378,46,14},"Balance",type::micro,inkSecondary,Qt::AlignCenter);
-        const double balance=r.busBalance[i];knob(p,{xx+23,418},knob,(balance+1)/2,balance==0?"C":QString(balance<0?"L%1":"R%1").arg(std::abs(balance)*100,0,'f',0),!r.busComposite[i],true);
-        if(!r.busComposite[i])add({xx+1,396,44,44},Balance,"Balance: drag sideways or up/down; scroll to adjust; double-click to center",i);
-        const QRectF mono(xx,446,46,routeHeight),mute(xx,474,46,routeHeight);
+        text(p,{xx,busTop,busCol,20},label,type::label,tone,Qt::AlignCenter,true);
+        p.fillRect(QRectF(xx+(busCol-26)/2,busTop+22,26,2),tone);
+        const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"Stereo",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
+        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,inkSecondary,Qt::AlignCenter);
+        const QPointF balanceCenter{xx+busCol/2,busTop+94};const double balance=r.busBalance[i];
+        knob(p,balanceCenter,knobSize,(balance+1)/2,balance==0?"C":QString(balance<0?"L%1":"R%1").arg(std::abs(balance)*100,0,'f',0),!r.busComposite[i],true);
+        const QRectF balanceHit{balanceCenter.x()-knobSize/2,balanceCenter.y()-knobSize/2,knobSize,knobSize};
+        if(!r.busComposite[i])add(balanceHit,Balance,"Balance: drag sideways or up/down; scroll to adjust; double-click to center",i);
+        const QRectF mono(xx,busTop+122,busCol,routeHeight),muteR(xx,busTop+150,busCol,routeHeight);
         button(p,mono,r.busMono[i]?"Mono":"Stereo",r.busMono[i],!r.busComposite[i],type::micro,tone);if(!r.busComposite[i])add(mono,BusMono,"Stereo / mono downmix",i);
-        button(p,mute,"Mute",r.busMute[i],true,type::value,danger);add(mute,MasterMute,"Mute this output bus only. From a terminal: linux-mixer --ctl mute a1..a5|b1..b3 toggle",i);
+        button(p,muteR,"Mute",r.busMute[i],true,type::value,danger);add(muteR,MasterMute,"Mute this output bus only. From a terminal: linux-mixer --ctl mute a1..a5|b1..b3 toggle",i);
+        const QRectF faderR(xx+14,mfTop,busCol-16,mfH);
         meter(p,{xx+4,mfTop,4,mfH},e.matrix->busPeak[i],e.matrix->ready,8+i);
-        fader(p,{xx+14,mfTop,32,mfH},r.busGain[i],true,false,tone);
-        add({xx+14,mfTop-6,32,mfH+12},MasterGain,"Independent output bus gain",i);
-        text(p,{xx,644,46,16},r.busGain[i]<=-60?"−∞":QString::number(r.busGain[i],'f',r.busGain[i]==std::floor(r.busGain[i])?0:1),type::value,ink,Qt::AlignCenter);
-        caption(p,{xx-2,660,50,12},i>=5?"Virtual":"Physical",Qt::AlignCenter,inkMuted);
+        fader(p,faderR,r.busGain[i],true,false,tone);
+        add(QRectF(faderR.center().x()-16,mfTop-6,32,mfH+12),MasterGain,"Independent output bus gain",i);
+        text(p,{xx,mfTop+mfH+4,busCol,16},r.busGain[i]<=-60?"−∞":QString::number(r.busGain[i],'f',r.busGain[i]==std::floor(r.busGain[i])?0:1),type::value,ink,Qt::AlignCenter);
     }
 }
 void Console::chooseDevice(bool input,int bus) {
@@ -385,7 +395,7 @@ void Console::activate(Action a,const QPointF& pos,int first,int second) {
     switch(a){
     case TapeLoad:{auto path=QFileDialog::getOpenFileName(this,"Load tape",{},"Audio / video (*.wav *.bwf *.aiff *.aif *.mp3 *.m4a *.mp4 *.mov *.avi *.wma *.wmv *.flac *.ogg);;All files (*)");if(!path.isEmpty())e.recorder->loadFile(path);break;}
     case TapeOptions:recorderOptions();break;
-    case TapeSeek:e.recorder->seek(std::clamp((pos.x()-1058)/204.,0.,1.)*e.recorder->duration);break;
+    case TapeSeek:e.recorder->seek(std::clamp((pos.x()-seekX)/seekW,0.,1.)*e.recorder->duration);break;
     case TapeRoute:if(first<5&&e.settings.routing.outputs[first].isEmpty())chooseDevice(false,first);else{e.settings.tape.playback[first]=!e.settings.tape.playback[first];e.apply();}break;
     case TapeTransport:
         if(first==0||first==1){transportDirection=first==0?-1:1;e.recorder->seek(e.recorder->position+transportDirection*2);transportTimer->start();}
@@ -428,10 +438,14 @@ void Console::drag(const QPointF& p) {
     case FxSend:{auto& value=dragBand==0?e.settings.routing.reverbSend[dragIndex]:dragBand==1?e.settings.routing.fxAmount[dragIndex]:e.settings.routing.delaySend[dragIndex];value=std::round(std::clamp(dragValue+(dragStart.y()-p.y())*.01,0.,1.)*100)/100;break;}
     case Balance:{const QPointF delta=p-dragStart;if(dragAxis==0&&std::max(std::abs(delta.x()),std::abs(delta.y()))>=1)dragAxis=std::abs(delta.x())>=std::abs(delta.y())?1:2;e.settings.routing.busBalance[dragIndex]=std::round(std::clamp(dragValue+(dragAxis==2?-delta.y():delta.x())*.015,-1.,1.)*100)/100;break;}
     case Eq:e.settings.routing.eq[dragIndex][dragBand]=std::round(std::clamp(dragValue+(dragStart.y()-p.y())*.2,-12.,12.)*10)/10;break;
-    case Color:if(hw.positionPanel){e.settings.routing.hardwarePan[dragIndex]=std::clamp((p.x()-24-dragIndex*129)/92.*2-1,-1.,1.);const double depth=std::clamp((p.y()-186)/39.,-1.,1.);e.settings.routing.hardwareDepth[dragIndex]=std::abs(depth)<.08?0.:depth;}else{hw.colorX=std::clamp((p.x()-24-dragIndex*129)/92.,0.,1.);hw.colorY=std::clamp((p.y()-165)/48.,0.,1.);}break;
-    case Gain:hw.gain=std::round(std::clamp(12-(p.y()-483)/139.*72,-60.,12.)*2)/2;break;
-    case VirtualGain:e.settings.routing.inputGain[dragIndex]=std::round(std::clamp(12-(p.y()-483)/139.*72,-60.,12.)*2)/2;break;
-    case MasterGain:e.settings.routing.busGain[dragIndex]=std::round(std::clamp(12-(p.y()-524)/98.*72,-60.,12.)*2)/2;break;
+    // Absolute-position controls read their value back out of the same rects the
+    // painter used, so geometry can never drift apart between input and paint.
+    case Color:{const auto in=padInner(dragIndex);const double fx=std::clamp((p.x()-in.x())/in.width(),0.,1.);
+        if(hw.positionPanel){e.settings.routing.hardwarePan[dragIndex]=fx*2-1.;const double depth=std::clamp((p.y()-in.center().y())/(in.height()/2),-1.,1.);e.settings.routing.hardwareDepth[dragIndex]=std::abs(depth)<.08?0.:depth;}
+        else{hw.colorX=fx;hw.colorY=std::clamp((p.y()-in.y())/in.height(),0.,1.);}break;}
+    case Gain:hw.gain=std::round(std::clamp(faderDb(p.y(),gainTop,gainH),-60.,12.)*2)/2;break;
+    case VirtualGain:e.settings.routing.inputGain[dragIndex]=std::round(std::clamp(faderDb(p.y(),gainTop,gainH),-60.,12.)*2)/2;break;
+    case MasterGain:e.settings.routing.busGain[dragIndex]=std::round(std::clamp(faderDb(p.y(),mfTop,mfH),-60.,12.)*2)/2;break;
     case Gate:hw.threshold=std::round(std::clamp(dragValue+(dragStart.y()-p.y())*.3,-60.,0.));break;
     case Comp:hw.compression=std::round(std::clamp(dragValue+(dragStart.y()-p.y())*.05,0.,10.)*10)/10;break;
     default:return;
@@ -440,15 +454,18 @@ void Console::drag(const QPointF& p) {
 }
 void Console::mousePressEvent(QMouseEvent* ev){
     if(ev->button()!=Qt::LeftButton)return;
-    const auto pos=logical(ev->position());if(const auto* h=hit(pos))activate(h->action,pos,h->first,h->second);
+    const auto pos=logical(ev->position());g_press=pos;
+    if(const auto* h=hit(pos))activate(h->action,pos,h->first,h->second);
 }
 void Console::mouseMoveEvent(QMouseEvent* ev){
     const auto pos=logical(ev->position());
+    if(pos!=g_hover){g_hover=pos;update();}   // drives hover/pressed styling
     if(dragging!=None)drag(pos);
     else if(const auto* h=hit(pos)){setCursor(h->action==Color?Qt::CrossCursor:Qt::PointingHandCursor);QToolTip::showText(ev->globalPosition().toPoint(),h->tip,this);}
     else {unsetCursor();QToolTip::hideText();}
 }
-void Console::mouseReleaseEvent(QMouseEvent* ev){if(ev->button()!=Qt::LeftButton)return;transportTimer->stop();dragging=None;e.save();}
+void Console::mouseReleaseEvent(QMouseEvent* ev){if(ev->button()!=Qt::LeftButton)return;g_press={-1,-1};transportTimer->stop();dragging=None;e.save();}
+void Console::leaveEvent(QEvent* ev){g_hover={-1,-1};g_press={-1,-1};QToolTip::hideText();update();QWidget::leaveEvent(ev);}
 void Console::mouseDoubleClickEvent(QMouseEvent* ev){
     if(ev->button()!=Qt::LeftButton)return;
     if(const auto* h=hit(logical(ev->position()))){
@@ -476,4 +493,4 @@ void Console::wheelEvent(QWheelEvent* ev){
     else return;
     e.apply();
 }
-void Console::contextMenuEvent(QContextMenuEvent* ev){const auto pos=logical(ev->pos());if(QRectF(1050,141,250,128).contains(pos)){recorderOptions();return;}const auto* h=hit(pos);if(h && h->action==Color){dragging=None;auto& hw=e.settings.hardware(h->first);hw.positionPanel=!hw.positionPanel;e.save();update();}else if(h && h->action==Plugins){e.settings.pluginRacks[h->first]=false;e.plugins->sync(e.running);e.save();e.message="Input plugin rack bypassed; click Plugins to enable it again";update();}else if(h && h->action==Gate)timing(h->first);else options();}
+void Console::contextMenuEvent(QContextMenuEvent* ev){const auto pos=logical(ev->pos());if(QRectF(masterX,tapeY,tapeW,tapeH).contains(pos)){recorderOptions();return;}const auto* h=hit(pos);if(h && h->action==Color){dragging=None;auto& hw=e.settings.hardware(h->first);hw.positionPanel=!hw.positionPanel;e.save();update();}else if(h && h->action==Plugins){e.settings.pluginRacks[h->first]=false;e.plugins->sync(e.running);e.save();e.message="Input plugin rack bypassed; click Plugins to enable it again";update();}else if(h && h->action==Gate)timing(h->first);else options();}

@@ -35,6 +35,8 @@ inline QFont font(int px,bool bold=false,bool caps=false){
 
 // Space
 constexpr double unit=8, radius=6, controlRadius=4;
-constexpr double knob=44, knobCompact=32;    // diameters
+// knobSize is spelled out to avoid colliding with the knob() paint helper in
+// console.cpp, which shares the global namespace through the anonymous one.
+constexpr double knobSize=44, knobCompact=30;  // diameters
 constexpr double routeHeight=22, rowHeight=28;
 }
