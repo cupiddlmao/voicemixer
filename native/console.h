@@ -29,6 +29,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent*) override;
 private:
     friend void runHealthUiTest(QApplication&,Console&);
+    friend int runHitRegionTest(Console&);   // tests/verify_hit_regions.cpp, no audio needed
     Engine& e;
     std::unique_ptr<UpdateChecker> updates;
     enum Action { None, Mic, Output, Start, Menu, Comp, Gate, Denoise, Bypass,

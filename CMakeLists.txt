@@ -69,6 +69,16 @@ if(BUILD_TESTING)
     target_link_libraries(verify-stability PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
     target_compile_options(verify-stability PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
     add_test(NAME stability-and-updates COMMAND verify-stability)
+    # Hit-region reachability. The pointer tests press at absolute coordinates
+    # and only speak against a live graph, so a control that is painted but
+    # covered by another rect has no offline guard. This one needs no audio.
+    add_executable(verify-hit-regions tests/verify_hit_regions.cpp native/console.cpp native/engine.cpp native/routing.cpp native/routing_settings.cpp native/recorder.cpp native/paths.cpp native/hardware_links.cpp native/plugin_racks.cpp native/audio_health.cpp native/update_checker.cpp native/release_info.cpp native/owned_processes.cpp native/profile_bundle.cpp native/control_commands.cpp native/profile_ui.cpp native/recorder_ui.cpp native/health_ui.cpp)
+    target_include_directories(verify-hit-regions PRIVATE native)
+    target_compile_definitions(verify-hit-regions PRIVATE VOICEMIXER_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(verify-hit-regions PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network)
+    target_compile_options(verify-hit-regions PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
+    add_test(NAME hit-region-reachability COMMAND verify-hit-regions)
+    set_tests_properties(hit-region-reachability PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 60)
   endif()
 endif()
 
