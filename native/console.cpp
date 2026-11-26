@@ -49,6 +49,7 @@ constexpr double triplePitch=35;
 double tripleX(int i,int k){return stripX(i)+8+knobCompact/2+k*triplePitch;}
 double faderDb(double y,double zoneTop,double zoneH){return 12-std::clamp((y-(zoneTop+capH/2))/(zoneH-capH),0.,1.)*72;}
 QPointF g_hover(-1,-1),g_press(-1,-1);
+QColor alpha(QColor c,int a){c.setAlpha(a);return c;}
 double scaleOf(QPainter& p){const auto t=p.worldTransform();return std::min(t.m11(),t.m22());}
 void text(QPainter& p,QRectF r,const QString& s,int px=type::value,QColor c=ink,int align=Qt::AlignLeft|Qt::AlignVCenter,bool bold=false,bool caps=false) {
     // Keep glyphs proportional when the canvas is stretched.
@@ -73,6 +74,19 @@ void button(QPainter& p,QRectF r,const QString& s,bool active=false,bool enabled
     if(!enabled)edge=border;
     panelBox(p,r,fill,edge,controlRadius);
     text(p,r,s,px,!enabled?inkMuted:active?bg:ink,Qt::AlignCenter,active);
+}
+// Eight recorder-route chips live on 21x18 cells, four to a column, so the A
+// group wraps into the second column and A5 ends up beside B1. The cells cannot
+// move, so the groups are separated by the hue the rest of the console already
+// uses for buses: A is accent, B is warn. The tint stays faint at rest and only
+// fills solid when the route is running.
+void groupChip(QPainter& p,QRectF r,const QString& s,bool on,QColor tone) {
+    const bool hover=r.contains(g_hover),pressed=hover&&r.contains(g_press);
+    QColor fill=on?tone:alpha(tone,24),edge=on?tone:alpha(tone,120);
+    if(pressed){fill=on?tone.darker(120):alpha(tone,64);edge=tone;}
+    else if(hover){fill=on?tone.lighter(112):alpha(tone,48);edge=tone;}
+    panelBox(p,r,fill,edge,controlRadius);
+    text(p,r,s,type::micro,on?bg:ink,Qt::AlignCenter,on);
 }
 void knob(QPainter& p,QPointF c,double d,double amount,const QString& value,bool enabled=true,bool bipolar=false) {
     const double sc=scaleOf(p),t11=p.worldTransform().m11(),t22=p.worldTransform().m22();
@@ -311,7 +325,7 @@ void Console::masters(QPainter& p) {
         button(p,r,(i==2&&tape.playing&&!tape.playPaused)||(i==4&&tape.recording&&!tape.recordPaused)?"Ⅱ":QStringList{"◀◀","▶▶","▶","■","●"}[i],i==2?tape.playing:i==4?tape.recording:false,enabled,type::value,i==4?warn:accent);
         if(i==4&&enabled&&!tape.recording){p.setPen(Qt::NoPen);p.setBrush(warn);p.drawEllipse(r.center(),1.5,1.5);}
         if(enabled)add(r,TapeTransport,QStringList{"Rewind (hold)","Fast forward (hold)","Play / pause","Stop playback / finalize recording","Record / pause recording in the same file"}[i],i);}
-    for(int bus=0;bus<8;++bus){const QRectF r(x+210+(bus/4)*23,tapeY+44+(bus%4)*22,21,18);button(p,r,bus<5?QString("A%1").arg(bus+1):QString("B%1").arg(bus-4),options.playback[bus],true,type::micro);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
+    for(int bus=0;bus<8;++bus){const QRectF r(x+210+(bus/4)*23,tapeY+44+(bus%4)*22,21,18);groupChip(p,r,bus<5?QString("A%1").arg(bus+1):QString("B%1").arg(bus-4),options.playback[bus],bus<5?accent:warn);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
     // Special FX
     const double fx=fxX;panelBox(p,{fx,tapeY,fxW,tapeH});caption(p,{fx+8,tapeY+8,fxW-16,16},"Special FX");
     const QRectF rev(fx+8,tapeY+30,fxW-16,rowHeight),del(fx+8,tapeY+66,fxW-16,rowHeight);
