@@ -53,7 +53,7 @@ void runSmoke(QApplication& app,Engine& e,Console& c) {
             QWheelEvent wheel({99,286},{99,286},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&wheel);
             click(c,{84,175}); // Actual color pad.
-            click(c,{32,355}); // Actual RNNoise button.
+            click(c,{32,323}); // Actual RNNoise button. Moved by the 0.6 strip rhythm: the Denoise chip now sits at (24,312,49,22).
             click(c,{99,584}); // B1 route, independent of the A1 monitor path.
             QWheelEvent busWheel({1343,550},{1343,550},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&busWheel);
@@ -129,7 +129,11 @@ void runPositionTest(QApplication& app,Engine& e,Console& c){
             QContextMenuEvent right(QContextMenuEvent::Mouse,{70,190},{70,190});QApplication::sendEvent(&c,&right);
             require(e.settings.hardware(0).positionPanel,"position mode did not activate");
             const double colorX=e.settings.colorX,colorY=e.settings.colorY;
-            click(c,{24,189});near(e.settings.routing.hardwarePan[0],-1,"position pad did not pan left");
+            // The pad's depth zero is its visual centre, y=178 (inner box 148..208).
+            // Before the redesign the zero sat at y=186 in a box centred on 182, so 189
+            // read as dead-zero; with a centred pad it would read depth 0.367 and weaken
+            // the pan the assertions below check.
+            click(c,{24,178});near(e.settings.routing.hardwarePan[0],-1,"position pad did not pan left");
             near(e.settings.colorX,colorX,"panning changed color warmth");near(e.settings.colorY,colorY,"panning changed color presence");
             Settings loaded;loaded.load(e.settings.json());require(loaded.positionPanel,"panel mode was not serialized");near(loaded.routing.hardwarePan[0],-1,"pan was not serialized");
             Settings legacy;legacy.load(QJsonObject{});require(!legacy.positionPanel,"legacy profile should open color mode");near(legacy.routing.hardwarePan[0],0,"legacy profile should center pan");
@@ -142,9 +146,9 @@ void runPositionTest(QApplication& app,Engine& e,Console& c){
                         near(parameter(node,"left:Gain 1"),e.settings.routing.routes[0][5]?1:0,"left pan did not reach DSP");
                         near(parameter(node,"right:Gain 1"),0,"left pan did not silence right route");
                     }
-                    QMouseEvent reset(QEvent::MouseButtonDblClick,{70,189},{70,189},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset);
+                    QMouseEvent reset(QEvent::MouseButtonDblClick,{70,178},{70,178},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset);
                     near(e.settings.routing.hardwarePan[0],0,"double-click did not center position");
-                    click(c,{116,189});near(e.settings.routing.hardwarePan[0],1,"position pad did not pan right");
+                    click(c,{116,178});near(e.settings.routing.hardwarePan[0],1,"position pad did not pan right");
                     QContextMenuEvent right(QContextMenuEvent::Mouse,{70,190},{70,190});QApplication::sendEvent(&c,&right);
                     require(!e.settings.positionPanel,"right-click did not return to color mode");
                     near(e.settings.colorX,original->colorX,"color settings were lost while switching modes");
@@ -191,8 +195,8 @@ void runLiveControlsTest(QApplication& app,Engine& e,Console& c){
             auto phase=std::make_shared<int>(0);
             auto run=std::make_shared<std::function<void()>>();
             *run=[&,state,bus,name,nodeId,phase,run,finish]{
-                const QPointF p=*phase==0?QPointF(1074+bus*52,409):QPointF(70,189);
-                const QPointF target=*phase==0?p+QPointF(30,0):QPointF(93,189);
+                const QPointF p=*phase==0?QPointF(1074+bus*52,409):QPointF(70,178);
+                const QPointF target=*phase==0?p+QPointF(30,0):QPointF(93,178);
                 QMouseEvent down(QEvent::MouseButtonPress,p,p,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&down);
                 auto* moves=new QTimer(state);moves->setInterval(8);
                 QObject::connect(moves,&QTimer::timeout,state,[&,target]{QMouseEvent move(QEvent::MouseMove,target,target,Qt::NoButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&move);});moves->start();
