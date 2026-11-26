@@ -8,6 +8,8 @@
 #include "console.h"
 #include "engine.h"
 #include <QtWidgets/QApplication>
+#include <QtCore/QFile>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QTextStream>
 #include <QtCore/QRectF>
 #include <map>
@@ -98,6 +100,66 @@ int runHitRegionTest(Console& c){
     QTextStream summary(stdout);
     summary<<c.hits.size()<<" hit rects across "<<seen.size()<<" action kinds\n";
     for(const auto& kv:seen) summary<<"  "<<name((Console::Action)kv.first)<<": "<<kv.second<<"\n";
+
+    // 3. The pins in native/smoke.cpp, checked against the real hit list rather
+    // than a model of it. smoke.cpp presses absolute logical pixels and its
+    // tests only run against live audio, so a control that moves turns them
+    // into clicks on nothing that nobody notices offline. Every coordinate it
+    // presses must land on a control, and when the trailing comment names one,
+    // it must land on that control.
+    QRegularExpression pin("\\{\\s*(-?[0-9.]+)\\s*,\\s*(-?[0-9.]+)\\s*\\}");
+    QFile smoke(QString(MIXER_SOURCE_DIR) + "/native/smoke.cpp");
+    if(!smoke.open(QIODevice::ReadOnly|QIODevice::Text)){
+        fail("cannot open native/smoke.cpp to check its pinned coordinates");
+    } else {
+        // Tags are written by the tests themselves: "click(c,{874.5,654}); //
+        // music-mute: Music strip Mute ...". Keying on the tag beats guessing
+        // from words, because "mute" alone matches mic, virtual and master mute.
+        static const struct{const char* tag;Console::Action action;} tags[]{
+            {"denoise",Console::Denoise},{"mic-mute",Console::Mute},{"music-mute",Console::VirtualMute},
+            {"mono-b2",Console::BusMono},{"pad",Console::Color},{"pan-left",Console::Color},
+            {"pan-right",Console::Color},{"pan-reset",Console::Color},{"route-b1",Console::Route},
+            {"route-b2",Console::Route},{"route-b3",Console::Route},{"balance-loop",Console::Balance},
+            {"seek",Console::TapeSeek},{"chip",Console::TapeRoute},{"transport",Console::TapeTransport},
+            {"plugins",Console::Plugins},{"gate",Console::Gate},{"comp",Console::Comp},
+        };
+        const QString src=QString::fromUtf8(smoke.readAll());
+        const auto lines=src.split('\n');
+        QRegularExpression tagRe("//\\s*([a-z0-9_-]+)\\s*:");
+        int checked=0,tagged=0;
+        for(int ln=0;ln<lines.size();++ln){
+            const QString& line=lines[ln];
+            if(!line.contains("click(")&&!line.contains("QMouseEvent")) continue;
+            auto it=pin.globalMatch(line);
+            const auto tagMatch=tagRe.match(line);
+            const QString tag=tagMatch.hasMatch()?tagMatch.captured(1):QString();
+            while(it.hasNext()){
+                const auto m=it.next();
+                const double x=m.captured(1).toDouble(),y=m.captured(2).toDouble();
+                if(x>1480||y>720) continue;                       // a size, not a position
+                ++checked;
+                const auto* got=c.hit(QPointF(x,y));
+                if(!got){fail(QString("smoke.cpp:%1 presses %2,%3 and hits nothing").arg(ln+1).arg(x).arg(y));continue;}
+                if(tag.isEmpty()){
+                    fail(QString("smoke.cpp:%1 presses %2,%3 with no tag — write \"// name:\" so this pin can be checked").arg(ln+1).arg(x).arg(y));
+                    continue;
+                }
+                bool known=false;
+                for(const auto& t:tags){
+                    if(tag!=t.tag) continue;
+                    known=true;++tagged;
+                    if(got->action!=t.action)
+                        fail(QString("smoke.cpp:%1 pin \"%2\" at %3,%4 hits \"%5\" but the tag means \"%6\"")
+                                 .arg(ln+1).arg(tag).arg(x).arg(y).arg(name(got->action)).arg(name(t.action)));
+                    break;
+                }
+                // A tag nobody maps is a pin nobody checks.
+                if(!known) fail(QString("smoke.cpp:%1 uses tag \"%2\", which this test does not know — add it to the table and say what control it names").arg(ln+1).arg(tag));
+            }
+        }
+        QTextStream(stdout)<<"  "<<checked<<" pinned coordinates resolved against the live hit list, "<<tagged<<" checked by tag\n";
+    }
+
     summary<<(failures?"":"no covered or off-canvas controls\n");
     return failures?1:0;
 }

@@ -156,7 +156,7 @@ void runPositionTest(QApplication& app,Engine& e,Console& c){
                         near(parameter(node,"right:Gain 1"),0,"left pan did not silence right route");
                     }
                     // Centre of padInner(0): 21.5 + 74/2 = 58.5 from the strip edge.
-                    QMouseEvent reset(QEvent::MouseButtonDblClick,{74.5,178},{74.5,178},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset);
+                    QMouseEvent reset(QEvent::MouseButtonDblClick,{74.5,178},{74.5,178},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset); // pan-reset: pad centre
                     near(e.settings.routing.hardwarePan[0],0,"double-click did not center position");
                     click(c,{116,178}); // pan-right: x=116 is past padInner(0), pan clamps to +1.
                     near(e.settings.routing.hardwarePan[0],1,"position pad did not pan right");
