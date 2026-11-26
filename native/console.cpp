@@ -36,17 +36,30 @@ constexpr double padTop=top+82,padW=101,padH=88,padInX=13.5,padInY=14;   // Inte
 // at logical x=93 on strip 1 and require pan to land on exactly 0.5, and x=24 /
 // x=116 must clamp to -1 / +1. Paint and drag both read padInner().
 constexpr double gainTop=top+392,gainH=190,capH=36;                       // strip fader zone
-constexpr double masterX=1048,masterW=416,mfTop=506,mfH=138;              // master fader zone
+constexpr double masterX=1048,masterW=416,mfTop=514,mfH=130;              // master fader zone
 constexpr double seekX=1056,seekW=196,tapeY=142,tapeW=262,tapeH=144;      // tape block
+// Recorder-route chips: one column of five for A1-A5 and a second column of
+// three for B1-B3, right of the transport. 21x17 on a 19px pitch fits five cells
+// in the 94px between the transport and the panel edge; the 6px break between
+// the columns is the group boundary, so A5 no longer sits beside A1.
+constexpr double routeCellW=21,routeCellH=17,routePitch=19,routeGap=6;
 constexpr double fxX=masterX+274,fxW=142;                                // special FX block
 constexpr double busPitch=50,busCol=46,busTop=326;                        // master section columns
 double stripX(int i){return page+i*pitch;}
 QRectF padRect(int i){return {stripX(i)+8,padTop,padW,padH};}
 QRectF padInner(int i){const auto r=padRect(i);return r.adjusted(padInX,padInY,-padInX,-padInY);}
-// Three-up compact knobs (EQ bands, FX sends): 30px on a 35px pitch fills the
-// 101px content column of a strip exactly, so both strip kinds agree on x.
+// Three-up compact knobs (FX sends): 30px on a 35px pitch fills the 101px
+// content column of a strip exactly, so both strip kinds agree on x.
 constexpr double triplePitch=35;
 double tripleX(int i,int k){return stripX(i)+8+knobCompact/2+k*triplePitch;}
+// The stereo EQ is the same three knobs twice, once per channel, so it also has
+// to say which row is which. An eight-pixel gutter at the head of the row holds
+// the L/R marker and the knobs tighten to a 31.5px pitch to stay inside the same
+// 101px column. The top row is the left channel, the bottom row the right: there
+// was no room to say so before, because the band labels already stopped three
+// pixels above the first knob.
+constexpr double eqGutter=unit,eqPitch=(padW-eqGutter-knobCompact)/2;
+double eqX(int i,int k){return stripX(i)+8+eqGutter+knobCompact/2+k*eqPitch;}
 double faderDb(double y,double zoneTop,double zoneH){return 12-std::clamp((y-(zoneTop+capH/2))/(zoneH-capH),0.,1.)*72;}
 QPointF g_hover(-1,-1),g_press(-1,-1);
 QColor alpha(QColor c,int a){c.setAlpha(a);return c;}
@@ -88,11 +101,10 @@ void stateButton(QPainter& p,QRectF r,const QString& s,bool on,bool enabled=true
     panelBox(p,r,fill,edge,controlRadius);
     text(p,r,s,px,!enabled?inkMuted:on?tone:ink,Qt::AlignCenter,on);
 }
-// Eight recorder-route chips live on 21x18 cells, four to a column, so the A
-// group wraps into the second column and A5 ends up beside B1. The cells cannot
-// move, so the groups are separated by the hue the rest of the console already
-// uses for buses: A is accent, B is warn. The tint stays faint at rest and only
-// fills solid when the route is running.
+// Eight recorder-route chips live on 21x17 cells: five (A1-A5) in the first
+// column and three (B1-B3) in the second, so the group boundary is structure,
+// not only the hue the rest of the console uses for buses (A accent, B warn).
+// The tint stays faint at rest and only fills solid when the route is running.
 void groupChip(QPainter& p,QRectF r,const QString& s,bool on,QColor tone) {
     const bool hover=r.contains(g_hover),pressed=hover&&r.contains(g_press);
     QColor fill=on?tone:alpha(tone,24),edge=on?tone:alpha(tone,120);
@@ -266,8 +278,12 @@ void Console::strip(QPainter& p,int index,bool hardware) {
         if(live)add(pad,Color,s.positionPanel?"Drag to position this input: left/right pans, up/down moves it front (louder, closer) or back (quieter, more reverb). Double-click to center. Right-click for Color Panel.":"Drag to shape warmth, brightness and presence. Double-click to reset. Right-click for left/right position.",index);
     } else {
         caption(p,{x+8,y+62,stripW-16,16},"Equalizer");
-        for(int k=0;k<3;++k)text(p,{tripleX(index,k)-triplePitch/2,y+82,triplePitch,14},QStringList{"Treble","Mid","Bass"}[k],type::micro,inkSecondary,Qt::AlignCenter);
-        for(int k=0;k<6;++k){const QPointF center{tripleX(index,k%3),y+(k<3?114:154)};const double value=routing.eq[vi][k];knob(p,center,knobCompact,(value+12)/24,QString::number(value,'f',value==std::floor(value)?0:1),true,true);add({center.x()-16,center.y()-16,32,32},Eq,QString("%1 channel %2 EQ gain (dB); double-click for flat").arg(k<3?"Left":"Right",QStringList{"Treble","Mid","Bass"}[k%3]),vi,k);}
+        for(int k=0;k<3;++k)text(p,{eqX(index,k)-eqPitch/2,y+82,eqPitch,14},QStringList{"Treble","Mid","Bass"}[k],type::micro,inkSecondary,Qt::AlignCenter);
+        // Row markers, centred on each knob row: EQ slots 0-2 are the left
+        // channel, 3-5 the right, the same L/R the position pad uses.
+        text(p,{x+8,y+107,eqGutter,14},"L",type::micro,inkMuted,Qt::AlignCenter);
+        text(p,{x+8,y+147,eqGutter,14},"R",type::micro,inkMuted,Qt::AlignCenter);
+        for(int k=0;k<6;++k){const QPointF center{eqX(index,k%3),y+(k<3?114:154)};const double value=routing.eq[vi][k];knob(p,center,knobCompact,(value+12)/24,QString::number(value,'f',value==std::floor(value)?0:1),true,true);add({center.x()-16,center.y()-16,32,32},Eq,QString("%1 channel %2 EQ gain (dB); double-click for flat").arg(k<3?"Left":"Right",QStringList{"Treble","Mid","Bass"}[k%3]),vi,k);}
     }
     if(virtualInput){
         caption(p,{x+8,y+178,stripW-16,16},"Applications");
@@ -350,7 +366,9 @@ void Console::masters(QPainter& p) {
     text(p,{x+8,tapeY+44,86,20},time(tape.position),type::label,tape.recording?warn:ink,Qt::AlignLeft|Qt::AlignVCenter,true);
     {const QRectF m(x+98,tapeY+52,64,4);meter(p,m,-90,false,16);
      const double level=std::clamp((tape.peak+60)/60.,0.,1.);p.fillRect(QRectF(m.x(),m.y(),m.width()*level,4),tape.peak>=-3?danger:accent);}
-    text(p,{x+166,tapeY+44,38,20},options.busMode?(options.bus<5?QString("A%1").arg(options.bus+1):QString("B%1").arg(options.bus-4)):"Input",type::value,inkSecondary,Qt::AlignRight|Qt::AlignVCenter);
+    // Ends 8px short of the route chips at x+208; at x+166 the word "Input"
+    // nearly touched the A1 cell.
+    text(p,{x+162,tapeY+44,38,20},options.busMode?(options.bus<5?QString("A%1").arg(options.bus+1):QString("B%1").arg(options.bus-4)):"Input",type::value,inkSecondary,Qt::AlignRight|Qt::AlignVCenter);
     const QRectF bar(seekX,tapeY+68,seekW,6);p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(bar,3,3);
     const double progress=tape.duration>0?std::clamp(tape.position/tape.duration,0.,1.):0;p.setBrush(accent);p.drawRoundedRect(QRectF(bar.x(),bar.y(),std::max(progress>0?6.:0.,bar.width()*progress),6),3,3);
     add(bar.adjusted(0,-4,0,8),TapeSeek,"Click to seek within the loaded file");
@@ -359,7 +377,9 @@ void Console::masters(QPainter& p) {
         button(p,r,(i==2&&tape.playing&&!tape.playPaused)||(i==4&&tape.recording&&!tape.recordPaused)?"Ⅱ":QStringList{"◀◀","▶▶","▶","■","●"}[i],i==2?tape.playing:i==4?tape.recording:false,enabled,type::value,i==4?warn:accent);
         if(i==4&&enabled&&!tape.recording){p.setPen(Qt::NoPen);p.setBrush(warn);p.drawEllipse(r.center(),1.5,1.5);}
         if(enabled)add(r,TapeTransport,QStringList{"Rewind (hold)","Fast forward (hold)","Play / pause","Stop playback / finalize recording","Record / pause recording in the same file"}[i],i);}
-    for(int bus=0;bus<8;++bus){const QRectF r(x+210+(bus/4)*23,tapeY+44+(bus%4)*22,21,18);groupChip(p,r,bus<5?QString("A%1").arg(bus+1):QString("B%1").arg(bus-4),options.playback[bus],bus<5?accent:warn);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
+    for(int bus=0;bus<8;++bus){const bool b=bus>=5;const int row=b?bus-5:bus;
+        const QRectF r(x+208+(b?routeCellW+routeGap:0),tapeY+44+row*routePitch,routeCellW,routeCellH);
+        groupChip(p,r,b?QString("B%1").arg(bus-4):QString("A%1").arg(bus+1),options.playback[bus],b?warn:accent);add(r,TapeRoute,"Route recorder playback to this bus",bus);}
     // Special FX
     const double fx=fxX;panelBox(p,{fx,tapeY,fxW,tapeH});caption(p,{fx+8,tapeY+8,fxW-16,16},"Special FX");
     const QRectF rev(fx+8,tapeY+30,fxW-16,rowHeight),del(fx+8,tapeY+66,fxW-16,rowHeight);
@@ -370,6 +390,10 @@ void Console::masters(QPainter& p) {
     caption(p,{x,298,masterW,16},"Master section",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
     text(p,{x+150,298,masterW-150,16},"0 · -24 · -48 dB",type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     panelBox(p,{x,316,masterW,360});
+    // The pan row is named once, not in every column: "Balance" repeated eight
+    // times was 40px of text in a 46px column, so the eight captions ran into
+    // one grey band across the bank. One label over the row says the same.
+    text(p,{x,busTop+118,masterW,12},"Balance",type::micro,alpha(inkMuted,168),Qt::AlignCenter);
     for(int i=0;i<8;++i) {
         const double xx=x+10+i*busPitch;const QString label=i<5?QString("A%1").arg(i+1):QString("B%1").arg(i-4);
         const QColor tone=i<5?accent:warn;const auto& r=e.settings.routing;
@@ -379,15 +403,16 @@ void Console::masters(QPainter& p) {
         // format and once for the downmix directly below it - and neither told
         // you which was which. Name the format by channel count instead, so the
         // pair reads 2 ch/8 ch here and Stereo/Mono below.
-        const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"2 ch",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
-        // Repeated eight times, so it is the section's quietest text: still a label
-        // above its knob, one step below the knob's own value in weight.
-        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,alpha(inkMuted,168),Qt::AlignCenter);
-        const QPointF balanceCenter{xx+busCol/2,busTop+94};const double balance=r.busBalance[i];
+        const QRectF mode(xx,busTop+32,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"2 ch",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
+        // The column is two groups, not six equal bands: the three switches sit
+        // together (format, downmix, mute) and the pan knob has moved down to
+        // sit on the fader it belongs to. That is what the old order - pan
+        // between two switches - was hiding.
+        const QPointF balanceCenter{xx+busCol/2,busTop+154};const double balance=r.busBalance[i];
         knob(p,balanceCenter,knobSize,(balance+1)/2,balance==0?"C":QString(balance<0?"L%1":"R%1").arg(std::abs(balance)*100,0,'f',0),!r.busComposite[i],true);
         const QRectF balanceHit{balanceCenter.x()-knobSize/2,balanceCenter.y()-knobSize/2,knobSize,knobSize};
         if(!r.busComposite[i])add(balanceHit,Balance,"Balance: drag sideways or up/down; scroll to adjust; double-click to center",i);
-        const QRectF mono(xx,busTop+122,busCol,routeHeight),muteR(xx,busTop+150,busCol,routeHeight);
+        const QRectF mono(xx,busTop+62,busCol,routeHeight),muteR(xx,busTop+92,busCol,routeHeight);
         button(p,mono,r.busMono[i]?"Mono":"Stereo",r.busMono[i],!r.busComposite[i],type::micro,tone);if(!r.busComposite[i])add(mono,BusMono,"Stereo / mono downmix",i);
         button(p,muteR,"Mute",r.busMute[i],true,type::value,danger);add(muteR,MasterMute,"Mute this output bus only. From a terminal: linux-mixer --ctl mute a1..a5|b1..b3 toggle",i);
         const QRectF faderR(xx+14,mfTop,busCol-16,mfH);

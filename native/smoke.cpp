@@ -50,25 +50,32 @@ void runSmoke(QApplication& app,Engine& e,Console& c) {
             require(e.matrix->ready,"routing matrix is not ready");
             *original=e.settings;
             *nodeId=captureNode().value("id").toInt();
-            QWheelEvent wheel({99,286},{99,286},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+            // Gate knob on Input 1: centre of {x+84,y+232} = (100,284).
+            QWheelEvent wheel({100,284},{100,284},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&wheel);
-            click(c,{84,175}); // Actual color pad.
-            click(c,{32,323}); // Actual RNNoise button. Moved by the 0.6 strip rhythm: the Denoise chip now sits at (24,312,49,22).
-            click(c,{99,584}); // B1 route, independent of the A1 monitor path.
-            QWheelEvent busWheel({1343,550},{1343,550},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+            click(c,{74.5,178}); // pad: colour pad centre, padInner(0) centre.
+            click(c,{48.5,323}); // denoise: Denoise chip {x+8,y+260,49,22}, centre.
+            click(c,{107.5,575}); // route-b1: Input 1 route row 5 {x+74,564,35,22}.
+            // B1 master fader: centre of {xx+14,514,30,130}, xx=1058+5*50.
+            QWheelEvent busWheel({1337,579},{1337,579},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&busWheel);
-            QWheelEvent systemWheel({711,550},{711,550},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+            // System virtual fader: centre of {x+34,gainTop-8,40,gainH+16}, x=661.
+            QWheelEvent systemWheel({715,539},{715,539},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&systemWheel);
-            QWheelEvent b2Wheel({1395,550},{1395,550},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+            // B2 master fader: xx=1058+6*50, centre (1387,579).
+            QWheelEvent b2Wheel({1387,579},{1387,579},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
             QApplication::sendEvent(&c,&b2Wheel);
-            click(c,{873,662}); // Music strip mute.
-            click(c,{99,606}); // Microphone -> B2.
-            click(c,{753,628}); // System -> B3.
-            QWheelEvent eqWheel({681,155},{681,155},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&eqWheel);
-            QWheelEvent sendWheel({33,415},{33,415},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&sendWheel);
-            QWheelEvent balanceWheel({1386,409},{1386,409},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&balanceWheel);
-            click(c,{1386,450}); // B2 stereo/mono switch.
-            if(!e.settings.mute)click(c,{99,662});
+            click(c,{874.5,654}); // music-mute: Music strip Mute {x+60,y+588,49,28}, centre.
+            click(c,{107.5,599}); // route-b2: Input 1 route row 6 {x+74,588,35,22}.
+            click(c,{752.5,623}); // route-b3: System strip route row 7 {x+74,612,35,22}.
+            // System EQ slot 0 (left Treble): eqX(5,0)=692 on the y+114 row.
+            QWheelEvent eqWheel({692,166},{692,166},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&eqWheel);
+            // Input 1 Reverb send: tripleX(0,0)=39 on the y+350 row.
+            QWheelEvent sendWheel({39,402},{39,402},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&sendWheel);
+            // B2 balance knob: centre {xx+23,busTop+154}, xx=1358.
+            QWheelEvent balanceWheel({1381,480},{1381,480},{},{0,120},Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QApplication::sendEvent(&c,&balanceWheel);
+            click(c,{1381,399}); // mono-b2: B2 downmix {xx,busTop+62,46,22}, centre.
+            if(!e.settings.mute)click(c,{100.5,654}); // mic-mute: Input 1 Mute, centre.
             e.settings.routing.busMute[5]=true;e.apply();
         } catch(const std::exception& ex){QTextStream(stderr)<<"FAIL: "<<ex.what()<<'\n';app.exit(1);return;}
         QTimer::singleShot(700,state,[&,original,nodeId,state]{
@@ -120,20 +127,22 @@ void runPositionTest(QApplication& app,Engine& e,Console& c){
         try{
             require(e.matrix->ready,"routing matrix is not ready");
             for(int i=0;i<5;++i){
-                const QPoint pos(70+i*129,190);QContextMenuEvent right(QContextMenuEvent::Mouse,pos,pos);
+                // padInner(i) centre is x=74.5; QPoint is integral, so 74.
+                const QPoint pos(74+i*129,190);QContextMenuEvent right(QContextMenuEvent::Mouse,pos,pos);
                 const bool previous=e.settings.hardware(i).positionPanel;QApplication::sendEvent(&c,&right);
                 require(e.settings.hardware(i).positionPanel!=previous,"right-click did not switch this panel");
                 QApplication::sendEvent(&c,&right);require(e.settings.hardware(i).positionPanel==previous,"second right-click did not restore panel");
             }
             e.settings.hardware(0).positionPanel=false;c.repaint();
-            QContextMenuEvent right(QContextMenuEvent::Mouse,{70,190},{70,190});QApplication::sendEvent(&c,&right);
+            QContextMenuEvent right(QContextMenuEvent::Mouse,{74,190},{74,190});QApplication::sendEvent(&c,&right);
             require(e.settings.hardware(0).positionPanel,"position mode did not activate");
             const double colorX=e.settings.colorX,colorY=e.settings.colorY;
             // The pad's depth zero is its visual centre, y=178 (inner box 148..208).
             // Before the redesign the zero sat at y=186 in a box centred on 182, so 189
             // read as dead-zero; with a centred pad it would read depth 0.367 and weaken
             // the pan the assertions below check.
-            click(c,{24,178});near(e.settings.routing.hardwarePan[0],-1,"position pad did not pan left");
+            click(c,{24,178}); // pan-left: x=24 is left of padInner(0), so pan clamps to -1.
+            near(e.settings.routing.hardwarePan[0],-1,"position pad did not pan left");
             near(e.settings.colorX,colorX,"panning changed color warmth");near(e.settings.colorY,colorY,"panning changed color presence");
             Settings loaded;loaded.load(e.settings.json());require(loaded.positionPanel,"panel mode was not serialized");near(loaded.routing.hardwarePan[0],-1,"pan was not serialized");
             Settings legacy;legacy.load(QJsonObject{});require(!legacy.positionPanel,"legacy profile should open color mode");near(legacy.routing.hardwarePan[0],0,"legacy profile should center pan");
@@ -146,10 +155,12 @@ void runPositionTest(QApplication& app,Engine& e,Console& c){
                         near(parameter(node,"left:Gain 1"),e.settings.routing.routes[0][5]?1:0,"left pan did not reach DSP");
                         near(parameter(node,"right:Gain 1"),0,"left pan did not silence right route");
                     }
-                    QMouseEvent reset(QEvent::MouseButtonDblClick,{70,178},{70,178},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset);
+                    // Centre of padInner(0): 21.5 + 74/2 = 58.5 from the strip edge.
+                    QMouseEvent reset(QEvent::MouseButtonDblClick,{74.5,178},{74.5,178},Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&reset);
                     near(e.settings.routing.hardwarePan[0],0,"double-click did not center position");
-                    click(c,{116,178});near(e.settings.routing.hardwarePan[0],1,"position pad did not pan right");
-                    QContextMenuEvent right(QContextMenuEvent::Mouse,{70,190},{70,190});QApplication::sendEvent(&c,&right);
+                    click(c,{116,178}); // pan-right: x=116 is past padInner(0), pan clamps to +1.
+                    near(e.settings.routing.hardwarePan[0],1,"position pad did not pan right");
+                    QContextMenuEvent right(QContextMenuEvent::Mouse,{74,190},{74,190});QApplication::sendEvent(&c,&right);
                     require(!e.settings.positionPanel,"right-click did not return to color mode");
                     near(e.settings.colorX,original->colorX,"color settings were lost while switching modes");
                     QTextStream(stdout)<<"PASS: all five panel toggles, left/right pointer input, center reset, saved mode/pan, legacy defaults and live DSP routing without graph restart.\n";
@@ -177,7 +188,9 @@ void runLiveControlsTest(QApplication& app,Engine& e,Console& c){
         try{
             for(int i=0;i<8;++i){
                 e.settings.routing.busComposite[i]=false;e.settings.routing.busBalance[i]=0;c.repaint();
-                QPointF p(1074+i*52,409);
+                // Centre of balance knob i: xx+23 with xx=1058+50i, on the
+                // busTop+154 row. Was 1074+52i when the knobs sat 26px higher.
+                QPointF p(1081+i*50,480);
                 QMouseEvent down(QEvent::MouseButtonPress,p,p,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&down);
                 QMouseEvent move(QEvent::MouseMove,p+QPointF(0,-20),p+QPointF(0,-20),Qt::NoButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&move);
                 near(e.settings.routing.busBalance[i],.3,"vertical balance gesture failed");
@@ -195,7 +208,10 @@ void runLiveControlsTest(QApplication& app,Engine& e,Console& c){
             auto phase=std::make_shared<int>(0);
             auto run=std::make_shared<std::function<void()>>();
             *run=[&,state,bus,name,nodeId,phase,run,finish]{
-                const QPointF p=*phase==0?QPointF(1074+bus*52,409):QPointF(70,178);
+                // Phase 0 presses bus `bus`'s balance knob and drags 30px right
+                // (0.45 -> gainL .55); phase 1 presses the position pad and
+                // drags to x=93, which is 75% across padInner(0): pan 0.5.
+                const QPointF p=*phase==0?QPointF(1081+bus*50,480):QPointF(74.5,178);
                 const QPointF target=*phase==0?p+QPointF(30,0):QPointF(93,178);
                 QMouseEvent down(QEvent::MouseButtonPress,p,p,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);QApplication::sendEvent(&c,&down);
                 auto* moves=new QTimer(state);moves->setInterval(8);
