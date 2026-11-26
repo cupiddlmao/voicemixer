@@ -38,6 +38,12 @@ inline QColor toneColor(Tone tone) {
     return theme::borderStrong;
 }
 
+// Text colour for a tone. Neutral means "an ordinary reading", so it is ink,
+// not the border grey toneColor() returns for an unfilled chip.
+inline QColor textColor(Tone tone) {
+    return tone == Tone::Neutral ? theme::ink : toneColor(tone);
+}
+
 // Numeric readouts use the mono companion of the single UI family so columns
 // of figures line up without depending on tabular figures in DejaVu Sans.
 inline QFont mono(int px, bool bold = false) {
@@ -172,9 +178,7 @@ inline QLabel* value(const QString& text, QWidget* parent = nullptr, Tone tone =
                      int px = theme::type::value) {
     auto* label = new QLabel(text, parent);
     label->setFont(mono(px));
-    const QString color = tone == Tone::Neutral ? QStringLiteral("#e8eff3")
-                                                : toneColor(tone).name(QColor::HexRgb);
-    label->setStyleSheet("color: " + color + ";");
+    label->setStyleSheet("color: " + textColor(tone).name(QColor::HexRgb) + ";");
     return label;
 }
 
@@ -189,14 +193,37 @@ inline QLabel* field(const QString& text, QWidget* parent = nullptr) {
 // --- Containers -------------------------------------------------------------
 
 // A filled panel that groups related rows instead of boxing every control.
+// Attach a layout with one of the helpers below; the panel itself stays bare
+// so a caller can choose a grid or a column.
 inline QFrame* panel(QWidget* parent = nullptr) {
     auto* box = new QFrame(parent);
     box->setProperty("uiPanel", true);
+    return box;
+}
+
+inline QVBoxLayout* vboxIn(QWidget* box) {
     auto* layout = new QVBoxLayout(box);
     layout->setContentsMargins(12, 12, 12, 12);
     layout->setSpacing(8);
-    box->setLayout(layout);
-    return box;
+    return layout;
+}
+
+inline QGridLayout* gridIn(QWidget* box) {
+    auto* layout = new QGridLayout(box);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setHorizontalSpacing(18);
+    layout->setVerticalSpacing(6);
+    return layout;
+}
+
+// A caption above a figure, the way the console prints a readout: uppercase
+// tracked micro caption, mono value beneath it, both left aligned in a column.
+inline void readoutCell(QGridLayout* grid, int col, const QString& caption, QLabel* figure) {
+    auto* label = micro(caption.toUpper());
+    label->setWordWrap(false);
+    label->setStyleSheet("color: #6b7f8c; letter-spacing: 0.8px; background: transparent;");
+    grid->addWidget(label, 0, col, Qt::AlignLeft);
+    grid->addWidget(figure, 1, col, Qt::AlignLeft);
 }
 
 // --- Signal marks -----------------------------------------------------------
