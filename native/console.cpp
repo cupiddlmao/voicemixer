@@ -265,7 +265,11 @@ void Console::strip(QPainter& p,int index,bool hardware) {
 }
 void Console::masters(QPainter& p) {
     const double x=masterX,y=top;
-    caption(p,{x,y+8,masterW,16},"Hardware out",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
+    // Hardware outputs are a group with its own controls, so they get the same
+    // panel as a strip. The panel closes 4px above the tape block; the caption
+    // and the A1..A5 rows keep the y they already had.
+    panelBox(p,{x,y,masterW,tapeY-y-4});
+    caption(p,{x+8,y+8,masterW,16},"Hardware out",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
     QString output=e.settings.routing.outputs[0].isEmpty()?"Select headphone output":e.settings.routing.outputs[0];
     for(const auto& d:e.devices)if(d.name==e.settings.routing.outputs[0])output=d.description;
     const QRectF a1(x,y+28,masterW,rowHeight);const bool a1set=!e.settings.routing.outputs[0].isEmpty();
