@@ -16,6 +16,11 @@ namespace {
 constexpr int maxFrames=8192;
 struct Slot { PluginDescription description;std::unique_ptr<AudioPluginInstance> plugin;bool bypass=false;AudioBuffer<float> audio; };
 using voicemixer::WiderControls;
+// Set by --render-ui. Photographing the rack must not need PipeWire: without
+// this, Rack's constructor quits the whole app on a failed connection before
+// the flag is ever read, and a UI review would create a node in the user's
+// live graph.
+bool renderOnly=false;
 struct Editor : DocumentWindow {
     bool deferAutosave=false;
     Editor(AudioPluginInstance& p,bool generic=false,bool original=false):DocumentWindow(p.getName()+(generic?" - Parameters":""),Colour(0xff344a57),DocumentWindow::closeButton){setUsingNativeTitleBar(true);AudioProcessorEditor* content=nullptr;
@@ -50,6 +55,32 @@ public:
     ~Rack() override{stopTimer();if(loop){pw_thread_loop_stop(loop);if(filter)pw_filter_destroy(filter);pw_thread_loop_destroy(loop);}save();editors.clear();for(auto& s:slots){s.plugin->removeListener(this);s.plugin->releaseResources();}}
     void paint(Graphics& g) override{g.fillAll(Colour(0xff344a57));g.setColour(Colour(0xff8be1bd));g.setFont(18);g.drawText(title+" - Plugin rack",12,8,getWidth()-134,26,Justification::centredLeft);}
     bool keyPressed(const KeyPress& key) override{if(key==KeyPress::escapeKey){if(hide)hide();return true;}return false;}
+    // Offscreen capture for design review, mirroring the Qt console's
+    // --screenshot: paints this component and its children into a PNG with no
+    // native peer, so it needs no display and opens no window on the user's
+    // desktop. Layout comes from resized(), which setBounds() triggers.
+    // This vendored JUCE ships image *readers* only, so emit raw ARGB and let
+    // the caller convert it (tests/shot_rack.py wraps this with PIL). Header is
+    // two int32s: width, height.
+    bool captureTo(File file,int w=850,int h=190){
+        Image img(Image::ARGB,w,h,false); Graphics g(img);
+        const Rectangle<int> previous=getBounds();
+        setBounds(0,0,w,h);
+        paintEntireComponent(g,false);
+        setBounds(previous);
+        MemoryOutputStream m;
+        m.writeInt(w); m.writeInt(h);
+        for(int y=0;y<h;++y) for(int x=0;x<w;++x){
+            const Colour c=img.getPixelAt(x,y);
+            m.writeByte((uint8)c.getRed()); m.writeByte((uint8)c.getGreen());
+            m.writeByte((uint8)c.getBlue()); m.writeByte((uint8)c.getAlpha());
+        }
+        FileOutputStream out(file);
+        if(!out.openedOk())return false;
+        out.write(m.getData(),(size_t)m.getDataSize());
+        out.flush();
+        return true;
+    }
     void resized() override{hideButton.setBounds(getWidth()-112,8,100,26);list.setBounds(12,45,getWidth()-24,28);int x=12;for(auto* b:{&add,&edit,&parameters,&original,&bypass,&remove,&up,&down}){int w=b==&add?155:b==&edit?100:83;b->setBounds(x,85,w,28);x+=w+5;}status.setBounds(12,125,getWidth()-24,50);}
     void report(String s){status.setText(s,dontSendNotification);std::cerr<<s<<'\n';}
     void publishVisibility(bool visible){
@@ -164,6 +195,7 @@ public:
         for(int c=0;c<2;++c)for(uint32_t i=0;i<n;++i)if(!std::isfinite(out[c][i]))out[c][i]=0;
     }
     void startAudio(){
+        if(renderOnly)return;
         pw_init(nullptr,nullptr);loop=pw_thread_loop_new("mixer-plugins",nullptr);
         static const pw_filter_events events=[](){pw_filter_events e{};e.version=PW_VERSION_FILTER_EVENTS;e.process=&Rack::process;e.state_changed=[](void* d,pw_filter_state,pw_filter_state s,const char*){auto& rack=*static_cast<Rack*>(d);rack.streaming=s==PW_FILTER_STATE_STREAMING;if(s==PW_FILTER_STATE_ERROR)rack.failed=true;};return e;}();
         filter=pw_filter_new_simple(pw_thread_loop_get_loop(loop),title.toRawUTF8(),pw_properties_new(PW_KEY_NODE_NAME,nodeName.toRawUTF8(),PW_KEY_NODE_DESCRIPTION,title.toRawUTF8(),PW_KEY_MEDIA_TYPE,"Audio",PW_KEY_MEDIA_CATEGORY,"Filter",PW_KEY_MEDIA_ROLE,"DSP",PW_KEY_MEDIA_CLASS,"Audio/Filter",PW_KEY_NODE_AUTOCONNECT,"false",PW_KEY_NODE_RATE,"1/48000",nullptr),&events,this);
@@ -219,12 +251,20 @@ void initialise(const String& args) override{
         std::cout<<JSON::toString(var(result))<<std::endl;quit();return;
     }
     if(a.size()<3){std::cerr<<"Usage: linux-mixer-plugin-host <rack-folder> <node-name> <label> [--background]\n";setApplicationReturnValue(2);quit();return;}
+    renderOnly=a.contains("--render-ui");
     rack=std::make_unique<Rack>(File(a[0].unquoted()),a[1].unquoted(),a[2].unquoted());
     rack->show=[this]{
         if(!window)window=std::make_unique<Window>(*rack);
         window->setVisible(true);window->toFront(true);
     };
     rack->hide=[this]{if(window)window->setVisible(false);};
+    if(a.contains("--render-ui")){
+        // The rack fills its ComboBox from a timer-driven load(), so let it
+        // settle before capturing, then leave without creating a peer.
+        const File out=a[a.indexOf("--render-ui")+1].unquoted();
+        Timer::callAfterDelay(1200,[this,out]{std::cout<<(rack->captureTo(out)?"wrote ":"failed ")<<out.getFullPathName()<<std::endl;quit();});
+        return;
+    }
     // Background audio racks have no top-level native peer. Creating a peer
     // and immediately hiding it can leave a dead startup surface on XWayland.
     if(!a.contains("--background"))rack->show();
