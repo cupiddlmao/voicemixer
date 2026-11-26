@@ -30,7 +30,11 @@ constexpr double W=1480,H=720;
 // Shared geometry: paint code and hit-testing/drag code both read these, so a
 // control cannot move visually without moving its grab region with it.
 constexpr double page=16,pitch=129,stripW=117,top=52,stripH=624;
-constexpr double padTop=top+82,padW=101,padH=88,padInX=12,padInY=14;       // IntelliPan / EQ block
+constexpr double padTop=top+82,padW=101,padH=88,padInX=13.5,padInY=14;   // IntelliPan / EQ block
+// padInX is 13.5, not 12, because the pad's travel box must stay 74px wide with
+// its left edge at x+21.5: the project's pointer tests (native/smoke.cpp) press
+// at logical x=93 on strip 1 and require pan to land on exactly 0.5, and x=24 /
+// x=116 must clamp to -1 / +1. Paint and drag both read padInner().
 constexpr double gainTop=top+392,gainH=190,capH=36;                       // strip fader zone
 constexpr double masterX=1048,masterW=416,mfTop=506,mfH=138;              // master fader zone
 constexpr double seekX=1056,seekW=196,tapeY=142,tapeW=262,tapeH=144;      // tape block
@@ -222,16 +226,18 @@ void Console::strip(QPainter& p,int index,bool hardware) {
     if(hardware) {
         caption(p,{x+8,y+178,stripW-16,16},"Dynamics");
         text(p,{x+8,y+194,50,14},"Comp",type::value,inkSecondary,Qt::AlignCenter);text(p,{x+59,y+194,50,14},"Gate",type::value,inkSecondary,Qt::AlignCenter);
-        knob(p,{x+33,y+232},knobSize,s.compression/10,QString::number(s.compression,'f',1),live);
-        knob(p,{x+84,y+232},knobSize,(s.threshold+60)/60,QString::number(s.threshold,'f',0),live);
-        add({x+11,y+210,44,44},Comp,"Compressor amount. Drag vertically or use mouse wheel.",index);add({x+62,y+210,44,44},Gate,"Gate threshold in dB. Right-click for attack/release timing.",index);
-        button(p,{x+8,y+260,49,22},"Denoise",s.denoise,live,type::micro);button(p,{x+60,y+260,49,22},"Bypass",s.bypass,live,type::micro,warn);
-        add({x+8,y+260,49,22},Denoise,"Toggle RNNoise noise suppression live",index);add({x+60,y+260,49,22},Bypass,"Bypass denoise, gate, compressor and color. Fader and mute stay active.",index);
+        const QPointF comp{x+33,y+232},gate{x+84,y+232};
+        knob(p,comp,knobSize,s.compression/10,QString::number(s.compression,'f',1),live);
+        knob(p,gate,knobSize,(s.threshold+60)/60,QString::number(s.threshold,'f',0),live);
+        add({comp.x()-knobSize/2,comp.y()-knobSize/2,knobSize,knobSize},Comp,"Compressor amount. Drag vertically or use mouse wheel.",index);add({gate.x()-knobSize/2,gate.y()-knobSize/2,knobSize,knobSize},Gate,"Gate threshold in dB. Right-click for attack/release timing.",index);
+        const QRectF denoise(x+8,y+260,49,22),bypass(x+60,y+260,49,22);
+        button(p,denoise,"Denoise",s.denoise,live,type::micro);button(p,bypass,"Bypass",s.bypass,live,type::micro,warn);
+        add(denoise,Denoise,"Toggle RNNoise noise suppression live",index);add(bypass,Bypass,"Bypass denoise, gate, compressor and color. Fader and mute stay active.",index);
     }
     {const QRectF r(x+8,y+288,101,24);button(p,r,e.plugins->hasFailed(index)?"FX error":"Plugins",e.plugins->running(index),true,type::value,e.plugins->hasFailed(index)?danger:accent);add(r,Plugins,"Show or hide this input’s VST3/LADSPA plugin rack without stopping effects; right-click to bypass the rack (Windows VST3 via yabridge)",index);}
-    {for(int k=0;k<3;++k){const double cx=tripleX(index,k);
+    {for(int k=0;k<3;++k){const double cx=tripleX(index,k);const QPointF center{cx,y+350};
     text(p,{cx-triplePitch/2,y+318,triplePitch,14},QStringList{"Reverb","FX","Delay"}[k],type::micro,inkSecondary,Qt::AlignCenter);
-        const double value=k==0?routing.reverbSend[index]:k==1?routing.fxAmount[index]:routing.delaySend[index];knob(p,{cx,y+350},knobCompact,value,QString::number(value*100,'f',0),true);add({cx-16,y+334,32,32},FxSend,k==0?"Reverb send (%)":k==1?"FX send level (%)":"Delay send (%)",index,k);}}
+        const double value=k==0?routing.reverbSend[index]:k==1?routing.fxAmount[index]:routing.delaySend[index];knob(p,center,knobCompact,value,QString::number(value*100,'f',0),true);add({center.x()-16,center.y()-16,32,32},FxSend,k==0?"Reverb send (%)":k==1?"FX send level (%)":"Delay send (%)",index,k);}}
     // fader zone: one rect feeds the painter, the scale labels and the grab region
     const QRectF faderR(x+14,gainTop,80,gainH),grab(faderR.center().x()-20,gainTop-8,40,gainH+16);
     const double gain=live?s.gain:virtualInput?routing.inputGain[vi]:0;
@@ -287,7 +293,7 @@ void Console::masters(QPainter& p) {
     text(p,{x+166,tapeY+44,38,20},options.busMode?(options.bus<5?QString("A%1").arg(options.bus+1):QString("B%1").arg(options.bus-4)):"Input",type::value,inkSecondary,Qt::AlignRight|Qt::AlignVCenter);
     const QRectF bar(seekX,tapeY+68,seekW,6);p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(bar,3,3);
     const double progress=tape.duration>0?std::clamp(tape.position/tape.duration,0.,1.):0;p.setBrush(accent);p.drawRoundedRect(QRectF(bar.x(),bar.y(),std::max(progress>0?6.:0.,bar.width()*progress),6),3,3);
-    add({seekX,tapeY+64,seekW,14},TapeSeek,"Click to seek within the loaded file");
+    add(bar.adjusted(0,-4,0,8),TapeSeek,"Click to seek within the loaded file");
     text(p,{seekX,tapeY+78,seekW,14},tape.error.isEmpty()?QString("%1 Hz · %2 ch · %3 %4").arg(options.rate).arg(options.busMode?options.channels:2).arg(options.format,time(tape.duration)):elide(tape.error,type::micro,seekW),type::micro,tape.error.isEmpty()?inkMuted:danger,Qt::AlignLeft|Qt::AlignVCenter);
     for(int i=0;i<5;++i){const QRectF r(seekX+i*40,tapeY+98,36,36);const bool enabled=i!=4||tape.inputReady||tape.recording;
         button(p,r,(i==2&&tape.playing&&!tape.playPaused)||(i==4&&tape.recording&&!tape.recordPaused)?"Ⅱ":QStringList{"◀◀","▶▶","▶","■","●"}[i],i==2?tape.playing:i==4?tape.recording:false,enabled,type::value,i==4?warn:accent);
@@ -309,7 +315,7 @@ void Console::masters(QPainter& p) {
         text(p,{xx,busTop,busCol,20},label,type::label,tone,Qt::AlignCenter,true);
         p.fillRect(QRectF(xx+(busCol-26)/2,busTop+22,26,2),tone);
         const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"Stereo",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
-        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,inkSecondary,Qt::AlignCenter);
+        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,inkMuted,Qt::AlignCenter);
         const QPointF balanceCenter{xx+busCol/2,busTop+94};const double balance=r.busBalance[i];
         knob(p,balanceCenter,knobSize,(balance+1)/2,balance==0?"C":QString(balance<0?"L%1":"R%1").arg(std::abs(balance)*100,0,'f',0),!r.busComposite[i],true);
         const QRectF balanceHit{balanceCenter.x()-knobSize/2,balanceCenter.y()-knobSize/2,knobSize,knobSize};
@@ -459,6 +465,9 @@ void Console::mousePressEvent(QMouseEvent* ev){
 }
 void Console::mouseMoveEvent(QMouseEvent* ev){
     const auto pos=logical(ev->position());
+    // A menu opened from mousePressEvent runs its own event loop and eats the
+    // release, so clear the pressed state on the first button-less move.
+    if(dragging==None && ev->buttons()==Qt::NoButton && g_press.x()>=0){g_press={-1,-1};update();}
     if(pos!=g_hover){g_hover=pos;update();}   // drives hover/pressed styling
     if(dragging!=None)drag(pos);
     else if(const auto* h=hit(pos)){setCursor(h->action==Color?Qt::CrossCursor:Qt::PointingHandCursor);QToolTip::showText(ev->globalPosition().toPoint(),h->tip,this);}
