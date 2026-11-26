@@ -1,5 +1,6 @@
 #include "update_checker.h"
 #include "paths.h"
+#include "ui_dialog.h"
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonObject>
@@ -12,6 +13,7 @@
 #include <QtGui/QDesktopServices>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QVBoxLayout>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QCheckBox>
 #include <QtWidgets/QPushButton>
@@ -56,15 +58,27 @@ void UpdateChecker::check(){
 }
 void UpdateChecker::showDialog(QWidget* parent){
     QDialog dialog(parent);dialog.setWindowTitle("Voicemixer updates");dialog.resize(520,280);styleMixerDialog(dialog);
-    auto* layout=new QVBoxLayout(&dialog);
-    auto* version=new QLabel("Installed version: " VOICEMIXER_VERSION);layout->addWidget(version);
-    auto* description=new QLabel("Checks fetch a small release list from GitHub. Downloads and installation are manual. Your mixer settings stay in your profile folder.");description->setWordWrap(true);layout->addWidget(description);
-    auto* startup=new QCheckBox("Check at startup (at most once per day)");startup->setChecked(preferences.value("startup",false).toBool());layout->addWidget(startup);
-    auto* previews=new QCheckBox("Include preview releases");previews->setChecked(preferences.value("previews",true).toBool());layout->addWidget(previews);
-    auto* label=new QLabel;label->setTextFormat(Qt::PlainText);label->setWordWrap(true);layout->addWidget(label);
-    auto* checkButton=new QPushButton("Check now");layout->addWidget(checkButton);
-    auto* open=new QPushButton("Open release page in browser");layout->addWidget(open);
-    auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close);layout->addWidget(buttons);
+    auto* layout=new QVBoxLayout(&dialog);ui::decorate(dialog);
+    // The installed version, marked as the thing that is actually running.
+    auto* versionRow=new QHBoxLayout;versionRow->setSpacing(8);
+    auto* version=new QLabel("Installed version: " VOICEMIXER_VERSION);layout->addLayout(versionRow);
+    version->setFont(ui::mono(theme::type::label));
+    version->setStyleSheet("color: #e8eff3; background: transparent;");
+    versionRow->addWidget(version);versionRow->addStretch();
+    versionRow->addWidget(ui::pill("CURRENT",ui::Tone::Active));
+    auto* description=ui::note("Checks fetch a small release list from GitHub. Downloads and installation are manual. Your mixer settings stay in your profile folder.");layout->addWidget(description);
+    auto* startup=new QCheckBox("Check at startup (at most once per day)");startup->setChecked(preferences.value("startup",false).toBool());startup->setFont(theme::font(theme::type::label));layout->addWidget(startup);
+    auto* previews=new QCheckBox("Include preview releases");previews->setChecked(preferences.value("previews",true).toBool());previews->setFont(theme::font(theme::type::label));layout->addWidget(previews);
+    auto* label=new QLabel;label->setTextFormat(Qt::PlainText);label->setWordWrap(true);label->setFont(ui::mono(theme::type::value));layout->addWidget(label);
+    // One primary action; the release page sits beside it at its own width
+    // instead of stretching into a second full-size bar.
+    auto* actions=new QHBoxLayout;actions->setSpacing(12);
+    auto* checkButton=ui::primary(new QPushButton("Check now"));
+    auto* open=new QPushButton("Open release page in browser");
+    actions->addWidget(checkButton);actions->addWidget(open);actions->addStretch();
+    auto* buttons=new QDialogButtonBox(QDialogButtonBox::Close);
+    actions->addWidget(buttons);
+    layout->addLayout(actions);
     const auto refresh=[&]{label->setText(status);checkButton->setEnabled(!busy);previews->setEnabled(!busy);open->setEnabled(!update.url.isEmpty());};
     connect(startup,&QCheckBox::toggled,&dialog,[this](bool on){QDir().mkpath(stateRoot());preferences.setValue("startup",on);});
     connect(previews,&QCheckBox::toggled,&dialog,[this,refresh](bool on){QDir().mkpath(stateRoot());preferences.setValue("previews",on);update={};status="Channel changed. Check now to refresh.";refresh();});
