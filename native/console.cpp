@@ -75,6 +75,19 @@ void button(QPainter& p,QRectF r,const QString& s,bool active=false,bool enabled
     panelBox(p,r,fill,edge,controlRadius);
     text(p,r,s,px,!enabled?inkMuted:active?bg:ink,Qt::AlignCenter,active);
 }
+// A control that is on by default (denoise, an effect send) is state, not signal:
+// it keeps the accent hue but as an outline and tint, so a row of five of them
+// no longer out-shouts the metering. Solid accent stays for genuinely active
+// routing and for the engine running. Off, hover and pressed stay distinct.
+void stateButton(QPainter& p,QRectF r,const QString& s,bool on,bool enabled=true,int px=type::micro,QColor tone=accent) {
+    const bool hover=enabled&&r.contains(g_hover),pressed=hover&&r.contains(g_press);
+    QColor fill=on?alpha(tone,26):panelRaised,edge=on?alpha(tone,140):border;
+    if(!enabled){fill=panelRaised;edge=border;}
+    else if(pressed){fill=on?alpha(tone,64):bg;edge=tone;}
+    else if(hover){fill=on?alpha(tone,44):panelRaised.lighter(125);edge=on?tone:borderStrong;}
+    panelBox(p,r,fill,edge,controlRadius);
+    text(p,r,s,px,!enabled?inkMuted:on?tone:ink,Qt::AlignCenter,on);
+}
 // Eight recorder-route chips live on 21x18 cells, four to a column, so the A
 // group wraps into the second column and A5 ends up beside B1. The cells cannot
 // move, so the groups are separated by the hue the rest of the console already
@@ -265,7 +278,7 @@ void Console::strip(QPainter& p,int index,bool hardware) {
         knob(p,gate,knobSize,(s.threshold+60)/60,QString::number(s.threshold,'f',0),live);
         add({comp.x()-knobSize/2,comp.y()-knobSize/2,knobSize,knobSize},Comp,"Compressor amount. Drag vertically or use mouse wheel.",index);add({gate.x()-knobSize/2,gate.y()-knobSize/2,knobSize,knobSize},Gate,"Gate threshold in dB. Right-click for attack/release timing.",index);
         const QRectF denoise(x+8,y+260,49,22),bypass(x+60,y+260,49,22);
-        button(p,denoise,"Denoise",s.denoise,live,type::micro);button(p,bypass,"Bypass",s.bypass,live,type::micro,warn);
+        stateButton(p,denoise,"Denoise",s.denoise,live);button(p,bypass,"Bypass",s.bypass,live,type::micro,warn);
         add(denoise,Denoise,"Toggle RNNoise noise suppression live",index);add(bypass,Bypass,"Bypass denoise, gate, compressor and color. Fader and mute stay active.",index);
     }
     {const QRectF r(x+8,y+288,101,24);button(p,r,e.plugins->hasFailed(index)?"FX error":"Plugins",e.plugins->running(index),true,type::value,e.plugins->hasFailed(index)?danger:accent);add(r,Plugins,"Show or hide this input’s VST3/LADSPA plugin rack without stopping effects; right-click to bypass the rack (Windows VST3 via yabridge)",index);}
@@ -341,7 +354,7 @@ void Console::masters(QPainter& p) {
     // Special FX
     const double fx=fxX;panelBox(p,{fx,tapeY,fxW,tapeH});caption(p,{fx+8,tapeY+8,fxW-16,16},"Special FX");
     const QRectF rev(fx+8,tapeY+30,fxW-16,rowHeight),del(fx+8,tapeY+66,fxW-16,rowHeight);
-    button(p,rev,"Reverb",e.settings.routing.reverbEnabled);button(p,del,"Delay",e.settings.routing.delayEnabled);
+    stateButton(p,rev,"Reverb",e.settings.routing.reverbEnabled,true,type::value);stateButton(p,del,"Delay",e.settings.routing.delayEnabled,true,type::value);
     add(rev,FxOptions,"Reverb parameters and per-bus returns",0);add(del,FxOptions,"Delay time, feedback and per-bus returns",1);
     text(p,{fx+8,tapeY+96,fxW-16,36},"Click an effect to configure its bus returns",type::micro,inkMuted,Qt::AlignLeft|Qt::AlignTop|Qt::TextWordWrap);
     // Master section
@@ -354,7 +367,9 @@ void Console::masters(QPainter& p) {
         text(p,{xx,busTop,busCol,20},label,type::label,tone,Qt::AlignCenter,true);
         p.fillRect(QRectF(xx+(busCol-26)/2,busTop+22,26,2),tone);
         const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"Stereo",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
-        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,inkMuted,Qt::AlignCenter);
+        // Repeated eight times, so it is the section's quietest text: still a label
+        // above its knob, one step below the knob's own value in weight.
+        text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,alpha(inkMuted,168),Qt::AlignCenter);
         const QPointF balanceCenter{xx+busCol/2,busTop+94};const double balance=r.busBalance[i];
         knob(p,balanceCenter,knobSize,(balance+1)/2,balance==0?"C":QString(balance<0?"L%1":"R%1").arg(std::abs(balance)*100,0,'f',0),!r.busComposite[i],true);
         const QRectF balanceHit{balanceCenter.x()-knobSize/2,balanceCenter.y()-knobSize/2,knobSize,knobSize};
