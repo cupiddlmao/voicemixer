@@ -154,8 +154,14 @@ void meter(QPainter& p,QRectF r,double db,bool live,int id) {
 void fader(QPainter& p,QRectF r,double value,bool live,bool drawScale=true,QColor tone=accent) {
     const double cx=r.center().x(),t=std::clamp((12-value)/72.,0.,1.);
     const double yy=r.y()+capH/2+t*(r.height()-capH);
-    p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(QRectF(cx-4,r.y(),8,r.height()),4,4);
-    p.setBrush(live?tone:track);p.drawRoundedRect(QRectF(cx-4,yy,8,r.bottom()-yy),4,4);
+    p.setPen(Qt::NoPen);p.setBrush(meterWell);p.drawRoundedRect(QRectF(cx-4,r.y(),8,r.height()),4,4);
+    // Travel already covered is position, not signal. Holding it at full accent
+    // put thirteen long bright bars on screen at unity - more green than the
+    // meters it is supposed to sit beside, which is what still made the console
+    // read loud after the toggles were quieted. Keep the hue (A still green, B
+    // still amber) so the columns stay distinguishable, at a strength below the
+    // meter: the moving thing stays the brightest thing.
+    p.setBrush(live?alpha(tone,110):track);p.drawRoundedRect(QRectF(cx-4,yy,8,r.bottom()-yy),4,4);
     for(int db:{0,-24,-48}) {
         const double y=r.y()+capH/2+(12-db)/72.*(r.height()-capH);
         // The master bank has 50px per column and a 26px cap, which leaves 12px of
@@ -366,7 +372,11 @@ void Console::masters(QPainter& p) {
         const QColor tone=i<5?accent:warn;const auto& r=e.settings.routing;
         text(p,{xx,busTop,busCol,20},label,type::label,tone,Qt::AlignCenter,true);
         p.fillRect(QRectF(xx+(busCol-26)/2,busTop+22,26,2),tone);
-        const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"Stereo",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
+        // "Stereo" used to appear twice in every column - once for the patch
+        // format and once for the downmix directly below it - and neither told
+        // you which was which. Name the format by channel count instead, so the
+        // pair reads 2 ch/8 ch here and Stereo/Mono below.
+        const QRectF mode(xx,busTop+28,busCol,routeHeight);button(p,mode,r.busComposite[i]?"8 ch":"2 ch",r.busComposite[i],true,type::micro,tone);add(mode,BusMode,"Normal stereo or an 8-channel pre-fader Composite patch",i);
         // Repeated eight times, so it is the section's quietest text: still a label
         // above its knob, one step below the knob's own value in weight.
         text(p,{xx,busTop+54,busCol,14},"Balance",type::micro,alpha(inkMuted,168),Qt::AlignCenter);
