@@ -102,6 +102,8 @@ QTableView, QTableWidget { background-color: #141d25; alternate-background-color
                            color: #e8eff3; gridline-color: #223140; border: 1px solid #2d3e4b;
                            border-radius: 6px; selection-background-color: #2f5a48;
                            selection-color: #e8eff3; outline: 0; }
+QScrollArea { background-color: #141d25; border: none; }
+QScrollArea > QWidget > QWidget { background-color: #141d25; }
 QTableView::item, QTableWidget::item { padding: 2px 6px; }
 QHeaderView { background-color: transparent; border: none; }
 QHeaderView::section { background-color: #1c2833; color: #93a7b4; border: none;
@@ -173,6 +175,16 @@ inline QLabel* micro(const QString& text, QWidget* parent = nullptr) {
     return label;
 }
 
+// A column caption: uppercase micro with tracking, never wrapping. This is the
+// console's caption idiom, used to name a column of a table or a readout.
+inline QLabel* caption(const QString& text, QWidget* parent = nullptr) {
+    auto* label = new QLabel(text.toUpper(), parent);
+    label->setFont(theme::font(theme::type::micro, false, true));
+    label->setStyleSheet("color: #6b7f8c; background: transparent;");
+    label->setWordWrap(false);
+    return label;
+}
+
 // A figure, or a device name: mono so columns of them line up.
 inline QLabel* value(const QString& text, QWidget* parent = nullptr, Tone tone = Tone::Neutral,
                      int px = theme::type::value) {
@@ -219,11 +231,19 @@ inline QGridLayout* gridIn(QWidget* box) {
 // A caption above a figure, the way the console prints a readout: uppercase
 // tracked micro caption, mono value beneath it, both left aligned in a column.
 inline void readoutCell(QGridLayout* grid, int col, const QString& caption, QLabel* figure) {
-    auto* label = micro(caption.toUpper());
-    label->setWordWrap(false);
-    label->setStyleSheet("color: #6b7f8c; letter-spacing: 0.8px; background: transparent;");
+    auto* label = ui::caption(caption);
     grid->addWidget(label, 0, col, Qt::AlignLeft);
     grid->addWidget(figure, 1, col, Qt::AlignLeft);
+}
+
+// A hairline that separates a caption band from the rows beneath it.
+inline QFrame* rule(QWidget* parent = nullptr) {
+    auto* line = new QFrame(parent);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Plain);
+    line->setFixedHeight(1);
+    line->setStyleSheet("color: #2d3e4b; background: transparent; border: none;");
+    return line;
 }
 
 // --- Signal marks -----------------------------------------------------------

@@ -3,9 +3,12 @@
 #include "routing.h"
 #include "paths.h"
 #include "console.h"
+#include "ui_dialog.h"
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QDialog>
 #include <QtWidgets/QFormLayout>
+#include <QtWidgets/QGridLayout>
+#include <QtWidgets/QHBoxLayout>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QComboBox>
 #include <QtWidgets/QCheckBox>
@@ -18,6 +21,7 @@
 #include <QtCore/QJsonDocument>
 #include <QtWidgets/QVBoxLayout>
 #include <QtCore/QScopedValueRollback>
+#include <array>
 
 namespace {
 QString stripName(int i){return i<5?QString("Hardware input %1").arg(i+1):QStringList{"System","Music","AUX"}[i-5];}
@@ -33,11 +37,42 @@ void reportProfile(Engine& engine,const QString& title,const QString& text){engi
 bool reviewProfile(ProfileBundle& profile,const Settings& current,const QList<Device>& devices,QWidget* parent){
     Settings proposed=profile.legacy?current:Settings{};proposed.load(profile.settings);
     QDialog dialog(parent);dialog.setObjectName("profileRestoreReview");dialog.setWindowTitle("Restore mixer profile");dialog.resize(680,650);styleMixerDialog(dialog);
-    QVBoxLayout layout(&dialog);QLabel explanation("Review devices before restoring. Plugin chains contain saved controls, not plugin software. Missing plugins are retained in the saved chain and the affected rack is disabled until resolved.");explanation.setWordWrap(true);layout.addWidget(&explanation);
-    QScrollArea scroll;scroll.setWidgetResizable(true);QWidget content;QFormLayout form(&content);layout.addWidget(&scroll);scroll.setWidget(&content);
+    QVBoxLayout layout(&dialog);ui::decorate(dialog);
+
+    // Title line: what this is, and which kind of file it came from.
+    QHBoxLayout header;header.setSpacing(8);
+    header.addWidget(ui::title("Restore mixer profile"));
+    header.addStretch();
+    header.addWidget(ui::pill(profile.legacy?"LEGACY PRESET":"COMPLETE BUNDLE",profile.legacy?ui::Tone::Warn:ui::Tone::Active));
+    layout.addLayout(&header);
+    // Filled in once the mappings below have been resolved.
+    auto* summary=ui::body(QString());
+    layout.addWidget(summary);
+
+    // Old-to-new list: the device named in the file next to the device that
+    // will actually be restored. Scannable in one column sweep.
+    layout.addWidget(ui::section("Device mappings"));
+    QScrollArea scroll;scroll.setWidgetResizable(true);scroll.setFrameShape(QFrame::NoFrame);
+    QWidget content;QGridLayout grid(&content);
+    grid.setContentsMargins(0,0,0,0);grid.setHorizontalSpacing(12);grid.setVerticalSpacing(6);
+    layout.addWidget(&scroll,1);scroll.setWidget(&content);
+    grid.addWidget(ui::caption("Device"),0,0);
+    grid.addWidget(ui::caption("In this file"),0,1);
+    grid.addWidget(ui::caption("Restore as"),0,2);
+    grid.setColumnStretch(2,1);
     std::array<QComboBox*,10> mappings{};QStringList notices;std::array<bool,8> missing{};
+    int changed=0,gridRow=0;
+    // The caption band gets a hairline and each group gets air above it, so
+    // two rows of uppercase never touch and read as one noisy band.
+    grid.addWidget(ui::rule(&content),++gridRow,0,1,3);
+    const auto groupRow=[&](const QString& name){
+        ++gridRow;grid.setRowMinimumHeight(gridRow,int(theme::unit));
+        ++gridRow;grid.addWidget(ui::section(name),gridRow,0,1,3);
+    };
     for(int row=0;row<10;++row){
         const bool input=row<5;const int index=input?row:row-5;
+        if(input&&row==0)groupRow("Hardware inputs");
+        if(!input&&row==5)groupRow("Outputs");
         const QString saved=input?proposed.hardware(index).mic:proposed.routing.outputs[index];
         const QString existing=input?current.hardware(index).mic:current.routing.outputs[index];
         auto* box=mappings[row]=new QComboBox(&content);box->setObjectName(QString("profileDevice%1").arg(row));box->addItem("Unassigned",QString{});
@@ -49,7 +84,13 @@ bool reviewProfile(ProfileBundle& profile,const Settings& current,const QList<De
         // the corresponding currently selected device or Unassigned.
         const QString selected=profile.legacy?existing:(found?saved:existing);
         box->setCurrentIndex(std::max(0,box->findData(selected)));
-        form.addRow(input?stripName(index):QString("Output A%1").arg(index+1),box);
+        if(box->currentData().toString()!=existing)++changed;
+        ++gridRow;
+        grid.addWidget(ui::field(input?stripName(index):QString("Output A%1").arg(index+1),&content),gridRow,0);
+        auto* from=ui::value(saved.isEmpty()?QString("unassigned"):saved,&content,found?ui::Tone::Muted:ui::Tone::Warn);
+        from->setMinimumWidth(0);
+        grid.addWidget(from,gridRow,1,Qt::AlignLeft|Qt::AlignVCenter);
+        grid.addWidget(box,gridRow,2);
     }
     if(!profile.legacy)for(int i=0;i<8;++i){
         QJsonArray plugins=profile.racks[i].value("plugins").toArray();
@@ -58,10 +99,44 @@ bool reviewProfile(ProfileBundle& profile,const Settings& current,const QList<De
             else if(located!=info.file){plugin.insert("description",relocateProfilePlugin(plugin.value("description").toString(),located));plugins[p]=plugin;notices<<"Located plugin: "+info.name+" at "+located;}
         }profile.racks[i].insert("plugins",plugins);
     }
-    auto* noticesLabel=new QLabel(notices.isEmpty()?"All referenced devices and plugin files were found. Plugin load/compatibility is checked when its rack starts.":notices.join('\n'),&content);noticesLabel->setObjectName("profileMissingNotices");noticesLabel->setTextFormat(Qt::PlainText);noticesLabel->setWordWrap(true);form.addRow(noticesLabel);
-    QCheckBox chains("Restore all plugin chains and saved states (replaces current input racks)");chains.setObjectName("profileRestorePlugins");chains.setChecked(!profile.legacy);chains.setEnabled(!profile.legacy);layout.addWidget(&chains);
-    QLabel rollback("A local rollback backup is created before applying the restore. Mixer audio may briefly reconnect.");rollback.setWordWrap(true);layout.addWidget(&rollback);
-    QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);layout.addWidget(&buttons);QObject::connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);QObject::connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    summary->setText(QString("%1 of %2 device mappings change. ").arg(changed).arg(10)
+        +(profile.legacy?QString("This preset carries no plugin chains.")
+                         :QString("Plugin chains and their saved states come with the bundle.")));
+
+    // Notices: the one thing that can make a restore wrong, kept as plain
+    // text because the file names in it are the point.
+    auto* noticesHeader=new QHBoxLayout;noticesHeader->setSpacing(8);
+    noticesHeader->addWidget(ui::section("Notices"));
+    int problems=0;for(const auto& line:notices)if(line.startsWith("Missing "))++problems;
+    noticesHeader->addWidget(ui::pill(problems?QString("%1 TO CHECK").arg(problems):QString("NONE"),
+                                      problems?ui::Tone::Danger:ui::Tone::Active));
+    noticesHeader->addStretch();
+    layout.addLayout(noticesHeader);
+    auto* noticesPanel=ui::panel();
+    auto* noticesLabel=new QLabel(notices.isEmpty()?"All referenced devices and plugin files were found. Plugin load/compatibility is checked when its rack starts.":notices.join('\n'));
+    noticesLabel->setObjectName("profileMissingNotices");noticesLabel->setTextFormat(Qt::PlainText);
+    noticesLabel->setWordWrap(true);noticesLabel->setFont(ui::mono(theme::type::value));
+    noticesLabel->setStyleSheet("color: #93a7b4; background: transparent;");
+    ui::vboxIn(noticesPanel)->addWidget(noticesLabel);
+    layout.addWidget(noticesPanel);
+
+    QCheckBox chains("Restore all plugin chains and saved states (replaces current input racks)");chains.setObjectName("profileRestorePlugins");chains.setChecked(!profile.legacy);chains.setEnabled(!profile.legacy);
+    chains.setFont(theme::font(theme::type::label));
+    layout.addWidget(&chains);
+    auto* rollback=ui::micro("A local rollback backup is created before applying the restore. Mixer audio may briefly reconnect.");
+    layout.addWidget(rollback);
+    auto* explanation=ui::micro("Review devices before restoring. Plugin chains contain saved controls, not plugin software. Missing plugins are retained in the saved chain and the affected rack is disabled until resolved.");
+    layout.addWidget(explanation);
+    QDialogButtonBox buttons(QDialogButtonBox::Ok|QDialogButtonBox::Cancel);
+    ui::primary(buttons.button(QDialogButtonBox::Ok));
+    layout.addWidget(&buttons);QObject::connect(&buttons,&QDialogButtonBox::accepted,&dialog,&QDialog::accept);QObject::connect(&buttons,&QDialogButtonBox::rejected,&dialog,&QDialog::reject);
+    // TEMPORARY CAPTURE SCAFFOLDING: photograph the review dialog, which has
+    // no hook of its own. Render synchronously so the test's instant accept
+    // cannot race it. DELETE before commit.
+    if(const QString shots=qEnvironmentVariable("LINUX_MIXER_UI_TEST_OUTPUT");!shots.isEmpty()){
+        static int take=0;
+        QDir().mkpath(shots);dialog.show();dialog.grab().save(shots+QString("/profile-restore-%1.png").arg(++take));
+    }
     const bool accepted=dialog.exec()==QDialog::Accepted;
     // content is a stack widget; detach it before the scroll area destroys it.
     scroll.takeWidget();if(!accepted)return false;

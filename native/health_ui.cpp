@@ -114,11 +114,8 @@ void Console::audioHealth(){
         const QStringList captions{"Memory-lock limit","Failed plugin racks"};
         for(int i=0;i<2;++i){
             auto* cell=new QVBoxLayout;cell->setSpacing(2);
-            auto* caption=ui::micro(captions[i].toUpper());
-            caption->setWordWrap(false);
-            caption->setStyleSheet("color: #6b7f8c; letter-spacing: 0.8px; background: transparent;");
             controllerFigures[i]=ui::value("—",nullptr,ui::Tone::Neutral,theme::type::label);
-            cell->addWidget(caption);cell->addWidget(controllerFigures[i]);
+            cell->addWidget(ui::caption(captions[i]));cell->addWidget(controllerFigures[i]);
             line->addLayout(cell,1);
         }
         row->addLayout(line);
