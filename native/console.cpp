@@ -96,9 +96,17 @@ double holdPeak(int id,double db){
     return hold[id];
 }
 // 4px vertical meter with peak-hold line.
+// At rest the slot keeps a visible well and a floor anchor, so a silent console
+// reads as meters sitting at the bottom rather than as dead dark columns. The
+// live paint below is deliberately unchanged, and the rect is the same rect, so
+// no fader moves.
 void meter(QPainter& p,QRectF r,double db,bool live,int id) {
+    if(!live){
+        p.setPen(Qt::NoPen);p.setBrush(meterWell);p.drawRoundedRect(r,2,2);
+        if(r.height()>r.width()){p.setBrush(track);p.drawRoundedRect(QRectF(r.x(),r.bottom()-3,r.width(),3),1.5,1.5);}
+        holdPeak(id,-90);return;
+    }
     p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(r,2,2);
-    if(!live){holdPeak(id,-90);return;}
     auto level=[&](double v){return std::clamp((v+60)/60.,0.,1.);};
     const double h=r.height()*level(db);
     p.save();p.setClipRect(r);

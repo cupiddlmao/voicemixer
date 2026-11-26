@@ -12,7 +12,7 @@ inline const QColor panelRaised{0x22,0x31,0x40};  // buttons, caps, chips
 inline const QColor border{0x2d,0x3e,0x4b};
 inline const QColor borderStrong{0x3d,0x52,0x62};
 inline const QColor track{0x3a,0x4c,0x58};        // inactive knob arcs, resting meter
-inline const QColor meterWell{0x26,0x34,0x3f};    // empty meter slot, one step above panel
+inline const QColor meterWell{0x2b,0x3a,0x47};    // empty meter slot, one step above panel
 inline const QColor grid{0x1f,0x2c,0x37};         // faint XY pad grid
 // Text
 inline const QColor ink{0xe8,0xef,0xf3};
