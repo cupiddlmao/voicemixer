@@ -90,6 +90,11 @@ void groupChip(QPainter& p,QRectF r,const QString& s,bool on,QColor tone) {
 }
 void knob(QPainter& p,QPointF c,double d,double amount,const QString& value,bool enabled=true,bool bipolar=false) {
     const double sc=scaleOf(p),t11=p.worldTransform().m11(),t22=p.worldTransform().m22();
+    // Same instrument at two diameters: identical 1.5px ring gap, identical 3px
+    // stroke and 270-degree sweep, and a value that sits one step down the type
+    // ramp on the compact 30px knob so its glyphs clear the ring as the 44px
+    // knob's do. That is what makes 44 and 30 read as a family rather than as a
+    // full-size control next to a squeezed one.
     const double rx=d/2*sc/t11,ry=d/2*sc/t22,inx=3*sc/t11,iny=3*sc/t22;
     p.setPen(Qt::NoPen);p.setBrush(bg);p.drawEllipse(c,rx,ry);
     const QRectF arc(c.x()-rx+inx,c.y()-ry+iny,2*(rx-inx),2*(ry-iny));
@@ -99,7 +104,8 @@ void knob(QPainter& p,QPointF c,double d,double amount,const QString& value,bool
         const int span=-int(270*16*(bipolar?amount-.5:amount));
         if(span!=0)p.drawArc(arc,bipolar?90*16:225*16,span);
     }
-    text(p,QRectF(c.x()-d/2,c.y()-8,d,16),value,type::value,enabled?ink:inkMuted,Qt::AlignCenter);
+    const int px=d>=knobSize?type::value:type::micro;
+    text(p,QRectF(c.x()-d/2,c.y()-8,d,16),value,px,enabled?ink:inkMuted,Qt::AlignCenter);
 }
 double holdPeak(int id,double db){
     static double hold[24],until[24],last[24];
