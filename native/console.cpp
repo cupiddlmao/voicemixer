@@ -136,7 +136,7 @@ double holdPeak(int id,double db){
 void meter(QPainter& p,QRectF r,double db,bool live,int id) {
     if(!live){
         p.setPen(Qt::NoPen);p.setBrush(meterWell);p.drawRoundedRect(r,2,2);
-        if(r.height()>r.width()){p.setBrush(track);p.drawRoundedRect(QRectF(r.x(),r.bottom()-3,r.width(),3),1.5,1.5);}
+        if(r.height()>r.width()){p.setBrush(borderStrong);p.drawRoundedRect(QRectF(r.x(),r.bottom()-4,r.width(),4),2,2);}
         holdPeak(id,-90);return;
     }
     p.setPen(Qt::NoPen);p.setBrush(bg);p.drawRoundedRect(r,2,2);
@@ -161,7 +161,10 @@ void fader(QPainter& p,QRectF r,double value,bool live,bool drawScale=true,QColo
     // read loud after the toggles were quieted. Keep the hue (A still green, B
     // still amber) so the columns stay distinguishable, at a strength below the
     // meter: the moving thing stays the brightest thing.
-    p.setBrush(live?alpha(tone,110):track);p.drawRoundedRect(QRectF(cx-4,yy,8,r.bottom()-yy),4,4);
+    // 130, not 110: at 110 the amber B-bus travel reads brown at rest, which
+    // cost the columns their identity. Mint at 110 still reads green, so this
+    // is the point where amber stops going muddy while staying under the meter.
+    p.setBrush(live?alpha(tone,130):track);p.drawRoundedRect(QRectF(cx-4,yy,8,r.bottom()-yy),4,4);
     for(int db:{0,-24,-48}) {
         const double y=r.y()+capH/2+(12-db)/72.*(r.height()-capH);
         // The master bank has 50px per column and a 26px cap, which leaves 12px of
