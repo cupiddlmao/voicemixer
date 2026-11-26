@@ -20,6 +20,8 @@
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLayout>
 #include <QtWidgets/QPushButton>
+#include <QtCore/QDir>
+#include <QtCore/qglobal.h>
 
 namespace ui {
 
@@ -58,9 +60,9 @@ inline QFont mono(int px, bool bold = false) {
 // application or into another dialog.
 inline QString dialogQss() {
     return QStringLiteral(R"QSS(
-QDialog { background-color: #141d25; }
+QDialog { background-color: #141d25; color: #e8eff3; }
 QFrame[uiPanel="true"] { background-color: #1c2833; border: 1px solid #2d3e4b; border-radius: 6px; }
-QLabel { background-color: transparent; }
+QLabel { background-color: transparent; color: #e8eff3; }
 QPushButton { background-color: #223140; color: #e8eff3; border: 1px solid #2d3e4b;
               border-radius: 4px; padding: 6px 14px; min-height: 16px; }
 QPushButton:hover { background-color: #263646; border-color: #3d5262; }
@@ -73,14 +75,14 @@ QPushButton[uiRole="primary"]:pressed { background-color: #5cbf95; }
 QPushButton[uiRole="primary"]:disabled { background-color: #2f5a48; color: #6b7f8c; border-color: #2f5a48; }
 QDialogButtonBox QPushButton { min-width: 84px; }
 QCommandLinkButton { background-color: transparent; border: none; }
-QCheckBox, QRadioButton { background-color: transparent; spacing: 8px; padding: 2px 0; }
+QCheckBox, QRadioButton { background-color: transparent; color: #e8eff3; spacing: 8px; padding: 2px 0; }
 QCheckBox::indicator, QRadioButton::indicator { width: 14px; height: 14px; }
 QCheckBox::indicator { border: 1px solid #3d5262; border-radius: 4px; background-color: #223140; }
 QCheckBox::indicator:checked { background-color: #6fd3a8; border-color: #6fd3a8; }
 QRadioButton::indicator { border: 1px solid #3d5262; border-radius: 8px; background-color: #223140; }
 QRadioButton::indicator:checked { background-color: #6fd3a8; border-color: #6fd3a8; }
 QCheckBox:disabled, QRadioButton:disabled { color: #6b7f8c; }
-QCheckBox[uiTone="warn"], QRadioButton[uiTone="warn"] { color: #e0a340; }
+QCheckBox[uiTone="warn"], QRadioButton[uiTone="warn"], QLabel[uiTone="warn"] { color: #e0a340; }
 QComboBox { background-color: #223140; color: #e8eff3; border: 1px solid #2d3e4b;
             border-radius: 4px; padding: 3px 8px; min-height: 20px; }
 QComboBox:hover { border-color: #3d5262; }
@@ -93,11 +95,15 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QTimeEdit, QAbstractSpinBox {
     background-color: #1c2833; color: #e8eff3; border: 1px solid #2d3e4b;
     border-radius: 4px; padding: 3px 6px; min-height: 20px;
     selection-background-color: #2f5a48; selection-color: #e8eff3; }
+// Fusion draws no arrow once the spin box is styled, so the stepper is drawn
+// with borders: a 14px column with a triangle in each half.
+// A stylesheet replaces Fusion's spin arrows with nothing, and Qt cannot draw
+// them from CSS borders alone. Rather than ship a stepper column with no
+// glyph in it, the buttons are folded away and the field reads as a plain
+// numeric entry: typing, arrow keys and the wheel still change the value.
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 0; border: none; }
 QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QTimeEdit:focus { border-color: #6fd3a8; }
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled, QTimeEdit:disabled { color: #6b7f8c; }
-QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
-    background-color: #223140; border: 1px solid #2d3e4b; width: 16px; }
-QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow { width: 7px; height: 7px; }
 QTableView, QTableWidget { background-color: #141d25; alternate-background-color: #1c2833;
                            color: #e8eff3; gridline-color: #223140; border: 1px solid #2d3e4b;
                            border-radius: 6px; selection-background-color: #2f5a48;
@@ -290,5 +296,15 @@ inline QPushButton* primary(QPushButton* button) {
 
 // Colour-carries-meaning hook for wording that is about arming or recording.
 inline void setWarnTone(QWidget* widget) { widget->setProperty("uiTone", "warn"); }
+
+// TEMPORARY CAPTURE SCAFFOLDING — DELETE before the final commit.
+// Photographs a dialog synchronously; nothing calls it once it is removed.
+inline void grabForTest(QWidget* dialog, const QString& name) {
+    const QString out = qEnvironmentVariable("LINUX_MIXER_UI_TEST_OUTPUT");
+    if (out.isEmpty() || !dialog) return;
+    QDir().mkpath(out);
+    dialog->show();
+    dialog->grab().save(out + "/" + name + ".png");
+}
 
 } // namespace ui

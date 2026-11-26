@@ -207,6 +207,15 @@ void runHealthUiTest(QApplication& app,Console& console){
         }
         console.audioHealth();
         QTimer::singleShot(300,&console,[capture]{capture("Voicemixer updates","updates.png");});console.updates->showDialog(&console);
+        // TEMPORARY CAPTURE SCAFFOLDING: the recorder dialogs have no hook, so
+        // open each one, let grabForTest photograph it, then dismiss it.
+        // DELETE before commit.
+        if(!qEnvironmentVariableIsEmpty("LINUX_MIXER_UI_TEST_OUTPUT")){
+            const auto dismiss=[](){for(auto* w:QApplication::topLevelWidgets())if(auto* d=qobject_cast<QDialog*>(w);d&&d->isVisible())d->reject();};
+            QTimer::singleShot(80,&console,dismiss);console.recorderOptions();
+            QTimer::singleShot(80,&console,dismiss);console.busOptions(0);
+            QTimer::singleShot(80,&console,dismiss);console.fxOptions(0);
+        }
         QTextStream(stdout)<<"PASS: audio health and update dialogs opened and closed without network requests.\n";app.quit();
     });
 }
