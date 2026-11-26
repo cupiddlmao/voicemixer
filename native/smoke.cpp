@@ -46,7 +46,7 @@ void runSmoke(QApplication& app,Engine& e,Console& c) {
     auto* nodeId=new int(-1);
     QTimer::singleShot(700,state,[&,original,nodeId,state]{
         try {
-            require(e.running,"start the native engine before smoke testing");
+            require(e.running,"the smoke test needs a live engine: re-run with --smoke-test --start-engine");
             require(e.matrix->ready,"routing matrix is not ready");
             *original=e.settings;
             *nodeId=captureNode().value("id").toInt();
