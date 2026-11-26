@@ -145,7 +145,13 @@ void fader(QPainter& p,QRectF r,double value,bool live,bool drawScale=true,QColo
     p.setBrush(live?tone:track);p.drawRoundedRect(QRectF(cx-4,yy,8,r.bottom()-yy),4,4);
     for(int db:{0,-24,-48}) {
         const double y=r.y()+capH/2+(12-db)/72.*(r.height()-capH);
-        p.setPen(QPen(borderStrong,1));p.drawLine(QPointF(cx-18,y),QPointF(cx-14,y));
+        // The master bank has 50px per column and a 26px cap, which leaves 12px of
+        // clear width - not enough for "-24" at the smallest type - so the master
+        // scale is read from weighted marks instead: unity is the long, bright
+        // dash, and the section header names all three (see masters()).
+        const bool unity=!drawScale&&db==0;
+        p.setPen(QPen(unity?inkMuted:borderStrong,1));
+        p.drawLine(QPointF(cx-(unity?20:18),y),QPointF(cx-14,y));
         if(drawScale)text(p,QRectF(r.x()-4,y-7,24,14),QString::number(db),type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     }
     const QRectF cap(cx-13,yy-capH/2,26,capH);
@@ -340,6 +346,7 @@ void Console::masters(QPainter& p) {
     text(p,{fx+8,tapeY+96,fxW-16,36},"Click an effect to configure its bus returns",type::micro,inkMuted,Qt::AlignLeft|Qt::AlignTop|Qt::TextWordWrap);
     // Master section
     caption(p,{x,298,masterW,16},"Master section",Qt::AlignLeft|Qt::AlignVCenter,inkSecondary);
+    text(p,{x+150,298,masterW-150,16},"0 · -24 · -48 dB",type::micro,inkMuted,Qt::AlignRight|Qt::AlignVCenter);
     panelBox(p,{x,316,masterW,360});
     for(int i=0;i<8;++i) {
         const double xx=x+10+i*busPitch;const QString label=i<5?QString("A%1").arg(i+1):QString("B%1").arg(i-4);
