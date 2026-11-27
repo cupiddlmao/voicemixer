@@ -119,6 +119,49 @@ int runMacroTests(){
     gainOnly.steps.append(trim);
     CHECK(!macroContainsToggle(gainOnly));
 
+    // A successful run lands every step on the one Settings object handed in.
+    Settings applied;
+    applied.routing.inputMute.at(1)=false;
+    applied.hardware(0).gain=0;
+    Macro session;session.name="Session";
+    for(const QString& text:QStringList{"mute music on","gain mic1 -6","denoise mic1 on","bypass mic2 on"}){
+        ControlCommand step;QString parseError;
+        CHECK(parseMacroStep(text,step,parseError));
+        session.steps.append(step);
+    }
+    QString runError="stale";
+    CHECK(runMacro(session,applied,&runError));
+    CHECK(runError.isEmpty());
+    CHECK(applied.routing.inputMute.at(1));
+    CHECK(applied.hardware(0).gain==-6);
+    CHECK(applied.hardware(0).denoise);
+    CHECK(applied.hardware(1).bypass);
+
+    // The partial-application guard: a failing second step leaves every setting
+    // exactly as it was, including the first step's would-be change.
+    Settings guarded;guarded.hardware(0).gain=3;guarded.routing.inputMute.at(1)=false;
+    const QJsonObject before=guarded.json();
+    Macro half;half.name="Half";
+    ControlCommand firstStep;CHECK(parseMacroStep("gain mic1 -6",firstStep,error));
+    half.steps.append(firstStep);
+    ControlCommand missingTarget;missingTarget.verb=ControlCommand::Gain;
+    missingTarget.kind=ControlCommand::Mic;missingTarget.index=9;missingTarget.db=-6;
+    half.steps.append(missingTarget);
+    runError.clear();
+    CHECK(!runMacro(half,guarded,&runError));
+    CHECK(runError.contains("step 2"));
+    CHECK(guarded.json()==before);
+
+    // A toggle step runs, and running the same macro again flips it back.
+    Settings flipped;flipped.hardware(0).mute=false;
+    Macro flip;flip.name="Flip";
+    ControlCommand flipStep;CHECK(parseMacroStep("mute mic1 toggle",flipStep,error));
+    flip.steps.append(flipStep);
+    CHECK(runMacro(flip,flipped,&runError));
+    CHECK(flipped.hardware(0).mute);
+    CHECK(runMacro(flip,flipped,&runError));
+    CHECK(!flipped.hardware(0).mute);
+
     QTextStream(stdout)<<"PASS: macro model, shared step parsing and clamping, whole-macro rejection and settings persistence.\n";
     return 0;
 }

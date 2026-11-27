@@ -159,3 +159,27 @@ bool validateMacro(const Macro& macro,const QList<Macro>& existing,QString& erro
         if(!validateStep(macro.steps.at(i),macro.name,i+1,error))return false;
     return true;
 }
+
+bool runMacro(const Macro& macro,Settings& settings,QString* error) {
+    Settings candidate=settings;
+    for(int i=0;i<macro.steps.size();++i){
+        const auto& step=macro.steps.at(i);
+        QString stepError;
+        // A step can arrive hand-built from an editor, and applyControlCommand
+        // indexes the settings arrays unchecked, so validate before applying.
+        if(!validateStep(step,macro.name,i+1,stepError)){
+            if(error)*error=stepError;
+            return false;
+        }
+        if(!applyControlCommand(candidate,step,stepError)){
+            if(error)*error=QString("macro '%1' step %2: %3")
+                .arg(macro.name).arg(i+1)
+                .arg(stepError.isEmpty()?QString("step failed"):stepError);
+            return false;
+        }
+    }
+    // The only write to the caller's settings: all steps or none.
+    settings=candidate;
+    if(error)error->clear();
+    return true;
+}

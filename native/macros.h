@@ -56,3 +56,15 @@ CommandScope commandScope(ControlCommand::Verb verb);
 // True when any step is a toggle, so an editor can warn that running the macro
 // twice flips twice. Computed on demand, so it cannot go stale after an edit.
 bool macroContainsToggle(const Macro& macro);
+
+// Applies every step of `macro` to `settings` through applyControlCommand,
+// stopping at the first failure and naming that step in `error`.
+//
+// Atomicity: the steps run against a copy that replaces `settings` only when all
+// of them succeed, so a failure leaves the caller's settings exactly as they
+// were and a successful run never exposes an intermediate state. This function
+// deliberately does not touch the engine: the caller issues exactly one
+// engine.apply() and engine.save() after a successful run. That single apply is
+// what lands the whole macro in one coalesced graph update, so this must not be
+// refactored into an apply()-per-step loop.
+bool runMacro(const Macro& macro, Settings& settings, QString* error);
