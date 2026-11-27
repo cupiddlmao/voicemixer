@@ -208,6 +208,10 @@ void RoutingMatrix::stop(){
     const bool released=owned_processes::stopAll(runtime,"matrix");
     if(!released){engine.message="Previous routing graph is still exiting; it will be reaped on the next stop";}
     nodeIds.clear();ports.clear();links.clear();stopping=false;
+    // A deliberate stop clears the launch backoff: the next start is expected
+    // soon (a restart pipeline), not a crash loop. The backoff set by start()
+    // continues to bound launches whose process dies on its own.
+    retryAfter=0;
 }
 void RoutingMatrix::shutdown(){
     meterTimer.stop();

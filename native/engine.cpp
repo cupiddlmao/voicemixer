@@ -241,8 +241,18 @@ QJsonObject Engine::configuration() const {
         {"context.spa-libs",QJsonObject{{"audio.convert.*","audioconvert/libspa-audioconvert"},{"support.*","support/libspa-support"}}},
         {"context.modules",modules}};
 }
+// Everything the routing matrix configuration and its capture links depend on.
+// Identical signatures mean a start() request while the engine is still starting
+// is redundant: honouring it would stop and relaunch the graph for nothing.
+QString Engine::currentGraphSignature() const {
+    QStringList extraMics;for(const auto& hw:settings.extra)extraMics<<hw.mic;
+    return settings.mic+'|'+extraMics.join(',')+'|'+QJsonDocument(settings.routing.json()).toJson(QJsonDocument::Compact)+'|'+QJsonDocument(settings.tape.json()).toJson(QJsonDocument::Compact);
+}
 void Engine::start(){
-    if(starting){restartRequested=true;return;}
+    if(starting){
+        if(launchSignature==currentGraphSignature())return;
+        restartRequested=true;return;
+    }
     if(running && ownedPid("engine")==0){message="Existing mixer graph is not owned by this folder; stop that instance first";notify();return;}
     if(pluginPath("librnnoise_ladspa.so").isEmpty() || pluginPath("libmixer_dsp.so").isEmpty()){message="Audio plugins missing; reinstall or rebuild Linux Mixer";notify();return;}
     bool gatePresent=false;
@@ -259,6 +269,7 @@ void Engine::start(){
         qint64 pid=0;
         if(!launcher.startDetached(&pid)){starting=false;message="Cannot launch PipeWire engine";notify();return;}
         owned_processes::record(runtime,"engine",pid);
+        launchSignature=currentGraphSignature();
         QTimer::singleShot(300,this,[this]{refresh();});
         QTimer::singleShot(5000,this,[this]{if(starting){starting=false;message="Engine failed to publish mic; check .runtime/engine.log";notify();}});
     });
