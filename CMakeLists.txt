@@ -37,6 +37,13 @@ if(BUILD_TESTING)
   add_executable(verify-dsp tests/verify_dsp.cpp)
   target_compile_options(verify-dsp PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
   add_test(NAME dsp COMMAND verify-dsp)
+  # The plugin rack is a separate JUCE executable, so it cannot include the Qt
+  # tokens; it carries a copy in native/plugins/juce_theme.h. Compare the two
+  # headers offline so a colour can never be changed on one side only.
+  add_executable(verify-juce-theme tests/verify_juce_theme.cpp)
+  target_compile_definitions(verify-juce-theme PRIVATE MIXER_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+  target_compile_options(verify-juce-theme PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
+  add_test(NAME verify_juce_theme COMMAND verify-juce-theme)
   if(Qt6_FOUND)
     add_executable(verify-meter-readers tests/verify_meter_readers.cpp)
     target_include_directories(verify-meter-readers PRIVATE native)
