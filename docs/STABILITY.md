@@ -1,5 +1,29 @@
 # Audio health and recovery
 
+## Known issue: engine restart discards the routing matrix's first launch (0.6.0 finding)
+
+Measured on the 0.6.0 build with a microphone configured: after `--start-engine`,
+the routing matrix's fresh launch is discarded and recovery waits one full retry
+interval (`matrix.pid` written at ~800 ms, removed ~50 ms later, graph alive again
+at ~10.35 s). Two mechanisms combine:
+
+1. Something interleaves `Engine::stop()` (the only caller of
+   `RoutingMatrix::stop()`) between the fresh matrix launch and its first
+   graph publish. The exact interleaving — a stale `pw-dump` result from the
+   1.8 s `refreshTimer` racing the restart, most likely — is not yet pinned
+   down; a fix needs an instrumented reproduction.
+2. `RoutingMatrix::start()` arms `retryAfter = now + 10000` unconditionally at
+   the top, before knowing whether the launch survives. So a discarded launch
+   blocks the relaunch for the full 10 s even though nothing was wrong with it.
+
+Candidate fixes, for review: arm `retryAfter` only when a launch is known to have
+failed (process exited or the 6 s ready timeout fired), and/or gate the matrix
+start path on the engine being past its restart window. Both touch engine
+telemetry, so they need a test that starts an engine with a microphone against a
+private session and asserts the matrix is live within one refresh interval.
+
+---
+
 Open **Menu → Audio health**, or click the status strip's **Audio health** link.
 It reads PipeWire's `pw-top` continuously through one persistent monitor. It does
 not change the system sample rate, buffer size, scheduling or device routing.
