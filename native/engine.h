@@ -79,6 +79,8 @@ private:
     int captureId=-1, sourceId=-1, broadcastId=-1, auxId=-1;
     bool profileOperation=false;
     bool starting=false, pending=false, stoppedExplicitly=false, restartRequested=false;
+    QString launchSignature;
+    QString currentGraphSignature() const;
     qint64 retryAfter=0;
     int recoveryAttempts=0;
     bool auxStarting=false, auxFailed=false;
