@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "rack_look_and_feel.h"
 #include <vector>
 
 namespace voicemixer {
@@ -30,13 +31,16 @@ class AutoTuneControls final : public AudioProcessorEditor, private Timer {
     AudioProcessorParameter* classic=nullptr;
     Choice *modernScale=nullptr,*classicScale=nullptr;
     Label heading,subtitle,footer;
+    RackLookAndFeel look;
 
     AudioProcessorParameter* find(const String& name) const {
         for(auto* p:processor.getParameters())if(p->getName(128)==name)return p;
         return nullptr;
     }
     void labelStyle(Label& label,const String& text){
-        label.setText(text,dontSendNotification);label.setColour(Label::textColourId,Colour(0xffc9d5de));
+        label.setText(text,dontSendNotification);
+        label.setFont(rack_theme::font(rack_theme::type::micro,false,0.05f));
+        label.setColour(Label::textColourId,rack_theme::colour(rack_theme::inkSecondary));
         label.setJustificationType(Justification::centred);addAndMakeVisible(label);
     }
     void addDial(const String& name,const String& title){
@@ -46,11 +50,11 @@ class AutoTuneControls final : public AudioProcessorEditor, private Timer {
         slider.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
         slider.setTextBoxStyle(Slider::TextBoxBelow,false,126,25);
         slider.setRange(0,1,.00001);slider.setRotaryParameters(MathConstants<float>::pi*1.25f,MathConstants<float>::pi*2.75f,true);
-        slider.setColour(Slider::rotarySliderFillColourId,Colour(0xff3bb6f4));
-        slider.setColour(Slider::rotarySliderOutlineColourId,Colour(0xff42505b));
-        slider.setColour(Slider::thumbColourId,Colour(0xffe3edf2));
-        slider.setColour(Slider::textBoxTextColourId,Colour(0xff51baf5));
-        slider.setColour(Slider::textBoxBackgroundColourId,Colour(0xff20282e));
+        slider.setColour(Slider::rotarySliderFillColourId,rack_theme::colour(rack_theme::accent));
+        slider.setColour(Slider::rotarySliderOutlineColourId,rack_theme::colour(rack_theme::track));
+        slider.setColour(Slider::thumbColourId,rack_theme::colour(rack_theme::ink));
+        slider.setColour(Slider::textBoxTextColourId,rack_theme::colour(rack_theme::ink));
+        slider.setColour(Slider::textBoxBackgroundColourId,rack_theme::colour(rack_theme::panel));
         slider.setColour(Slider::textBoxOutlineColourId,Colours::transparentBlack);
         if(auto* parameter=d->parameter){
             slider.setDoubleClickReturnValue(true,parameter->getDefaultValue());
@@ -72,9 +76,10 @@ class AutoTuneControls final : public AudioProcessorEditor, private Timer {
     Choice* addChoice(const String& name,const String& title){
         auto choice=std::make_unique<Choice>();auto* c=choice.get();c->parameter=find(name);
         labelStyle(c->label,title);c->combo.setComponentID(name);c->combo.setName(name);
-        c->combo.setColour(ComboBox::backgroundColourId,Colour(0xff20282e));
-        c->combo.setColour(ComboBox::textColourId,Colour(0xff51baf5));
-        c->combo.setColour(ComboBox::outlineColourId,Colour(0xff43515c));
+        c->combo.setColour(ComboBox::backgroundColourId,rack_theme::colour(rack_theme::panel));
+        c->combo.setColour(ComboBox::textColourId,rack_theme::colour(rack_theme::ink));
+        c->combo.setColour(ComboBox::outlineColourId,rack_theme::colour(rack_theme::border));
+        c->combo.setColour(ComboBox::arrowColourId,rack_theme::colour(rack_theme::inkSecondary));
         c->combo.setJustificationType(Justification::centred);
         const int steps=c->parameter?c->parameter->getNumSteps():0;
         if(steps>1&&steps<=128){
@@ -89,8 +94,8 @@ class AutoTuneControls final : public AudioProcessorEditor, private Timer {
     void addSwitch(const String& name,const String& title){
         auto item=std::make_unique<Switch>();auto* s=item.get();s->parameter=find(name);
         s->button.setButtonText(title);s->button.setComponentID(name);s->button.setName(name);
-        s->button.setColour(ToggleButton::textColourId,Colour(0xffc9d5de));
-        s->button.setColour(ToggleButton::tickColourId,Colour(0xff3bb6f4));
+        s->button.setColour(ToggleButton::textColourId,rack_theme::colour(rack_theme::ink));
+        s->button.setColour(ToggleButton::tickColourId,rack_theme::colour(rack_theme::accent));
         s->button.setEnabled(s->parameter!=nullptr);
         s->button.onClick=[this,s]{set(s->parameter,s->button.getToggleState()?1.f:0.f);sync();};
         addAndMakeVisible(s->button);switches.push_back(std::move(item));
@@ -106,8 +111,14 @@ class AutoTuneControls final : public AudioProcessorEditor, private Timer {
     void timerCallback() override{sync();}
 public:
     explicit AutoTuneControls(AudioPluginInstance& p):AudioProcessorEditor(p){
-        heading.setText("AUTO-TUNE PRO",dontSendNotification);heading.setFont(Font(25));heading.setColour(Label::textColourId,Colours::white);addAndMakeVisible(heading);
-        subtitle.setText("Voicemixer controls",dontSendNotification);subtitle.setColour(Label::textColourId,Colour(0xff7f9aaa));addAndMakeVisible(subtitle);
+        setLookAndFeel(&look);
+        heading.setText("AUTO-TUNE PRO",dontSendNotification);
+        heading.setFont(rack_theme::font(rack_theme::type::title,true));
+        heading.setColour(Label::textColourId,rack_theme::colour(rack_theme::ink));addAndMakeVisible(heading);
+        subtitle.setText("Voicemixer controls",dontSendNotification);
+        subtitle.setFont(rack_theme::font(rack_theme::type::value));
+        subtitle.setJustificationType(Justification::centredRight);
+        subtitle.setColour(Label::textColourId,rack_theme::colour(rack_theme::inkMuted));addAndMakeVisible(subtitle);
         addChoice("Input Type","INPUT TYPE");addChoice("Key","KEY");
         modernScale=addChoice("Modern Scale","SCALE");classicScale=addChoice("Scale","SCALE");
         addChoice("Correction Mode","CORRECTION MODE");
@@ -116,14 +127,19 @@ public:
         addDial("Retune Speed","Retune Speed");addDial("Flex-Tune","Flex-Tune");addDial("Humanize","Humanize");addDial("Natural Vibrato","Natural Vibrato");addDial("Wet-Dry Mix","Mix");
         addDial("Tracking","Tracking");addDial("Throat Length","Formant / Throat");addDial("Transpose","Transpose");addDial("Detune","Detune");addDial("Vibrato Rate","Vibrato Rate");
         footer.setText("Open Plugin UI for Graph editing. Parameters contains the remaining controls. Double-click a knob to reset it.",dontSendNotification);
-        footer.setColour(Label::textColourId,Colour(0xff96a8b4));footer.setJustificationType(Justification::centred);addAndMakeVisible(footer);
+        footer.setFont(rack_theme::font(rack_theme::type::value));
+        footer.setColour(Label::textColourId,rack_theme::colour(rack_theme::inkMuted));
+        footer.setJustificationType(Justification::centred);addAndMakeVisible(footer);
         setSize(1000,570);sync();startTimerHz(20);
     }
-    ~AutoTuneControls() override{stopTimer();}
+    ~AutoTuneControls() override{setLookAndFeel(nullptr);stopTimer();}
     void paint(Graphics& g) override{
-        g.fillAll(Colour(0xff252c32));g.setColour(Colour(0xff303b44));g.fillRect(0,0,getWidth(),58);
-        g.setColour(Colour(0xff3bb6f4));g.fillRect(0,57,getWidth(),2);
-        g.setColour(Colour(0xff42505b));g.drawHorizontalLine(184,20.f,float(getWidth()-20));g.drawHorizontalLine(532,20.f,float(getWidth()-20));
+        g.fillAll(rack_theme::colour(rack_theme::bg));
+        g.setColour(rack_theme::colour(rack_theme::panel));g.fillRect(0,0,getWidth(),58);
+        g.setColour(rack_theme::colour(rack_theme::border));
+        g.fillRect(0,57,getWidth(),1);
+        g.drawHorizontalLine(184,20.f,float(getWidth()-20));
+        g.drawHorizontalLine(532,20.f,float(getWidth()-20));
     }
     void resized() override{
         heading.setBounds(22,10,360,35);subtitle.setBounds(getWidth()-210,12,190,30);

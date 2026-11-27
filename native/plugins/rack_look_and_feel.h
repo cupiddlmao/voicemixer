@@ -51,6 +51,9 @@ public:
         setColour(ComboBox::textColourId, c(rack_theme::ink));
         setColour(ComboBox::outlineColourId, c(rack_theme::borderStrong));
         setColour(ComboBox::arrowColourId, c(rack_theme::inkSecondary));
+        // No state pip unless a component sets one: only the rack's slot bar
+        // has a slot state to show.
+        setColour(ComboBox::buttonColourId, juce::Colours::transparentBlack);
         setColour(ComboBox::focusedOutlineColourId, c(rack_theme::accent));
         setColour(Label::textColourId, c(rack_theme::ink));
         setColour(PopupMenu::backgroundColourId, c(rack_theme::panelRaised));
@@ -82,6 +85,15 @@ public:
     juce::Font getPopupMenuFont() override
     {
         return rack_theme::font(rack_theme::type::label);
+    }
+
+    // Slider value boxes are Labels made by the look-and-feel; give them the
+    // token size instead of the 15px default so knob readouts match the rest.
+    juce::Label* createSliderTextBox(juce::Slider& slider) override
+    {
+        auto* box = LookAndFeel_V4::createSliderTextBox(slider);
+        box->setFont(rack_theme::font(rack_theme::type::label));
+        return box;
     }
 
     // Inset the text so the state pip drawn in drawComboBox has its own column.
