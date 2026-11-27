@@ -1,26 +1,24 @@
 # Audio health and recovery
 
-## Known issue: engine restart discards the routing matrix's first launch (0.6.0 finding)
+## Fixed during 0.6.0: engine restart discarded the routing matrix's first launch
 
 Measured on the 0.6.0 build with a microphone configured: after `--start-engine`,
-the routing matrix's fresh launch is discarded and recovery waits one full retry
-interval (`matrix.pid` written at ~800 ms, removed ~50 ms later, graph alive again
-at ~10.35 s). Two mechanisms combine:
+the routing matrix's fresh launch was discarded and recovery waited one full
+retry interval (`matrix.pid` written at ~800 ms, removed ~50 ms later, graph
+alive again at ~10.35 s). An instrumented reproduction pinned two stacked
+defects, both fixed in `0464ee6`:
 
-1. Something interleaves `Engine::stop()` (the only caller of
-   `RoutingMatrix::stop()`) between the fresh matrix launch and its first
-   graph publish. The exact interleaving — a stale `pw-dump` result from the
-   1.8 s `refreshTimer` racing the restart, most likely — is not yet pinned
-   down; a fix needs an instrumented reproduction.
-2. `RoutingMatrix::start()` arms `retryAfter = now + 10000` unconditionally at
-   the top, before knowing whether the launch survives. So a discarded launch
-   blocks the relaunch for the full 10 s even though nothing was wrong with it.
+1. A redundant second `Engine::start()` — the `--start-engine` timer racing the
+   early recovery path — landed between the matrix launch and its first
+   publish. `start()` now captures a graph signature at launch (microphones,
+   routing, tape) and treats an identical request while starting as a no-op;
+   only a real configuration change still queues a restart.
+2. `RoutingMatrix::start()` armed its 10 s `retryAfter` unconditionally before
+   knowing whether the launch would survive. A deliberate stop now clears the
+   backoff; it continues to bound launches whose process dies on its own.
 
-Candidate fixes, for review: arm `retryAfter` only when a launch is known to have
-failed (process exited or the 6 s ready timeout fired), and/or gate the matrix
-start path on the engine being past its restart window. Both touch engine
-telemetry, so they need a test that starts an engine with a microphone against a
-private session and asserts the matrix is live within one refresh interval.
+`tests/verify_engine_restart.py` asserts the routing graph is up within 8 s of
+`--start-engine` on a private session (the fixed behaviour measures ~0.9 s).
 
 ---
 

@@ -38,7 +38,8 @@ row of run buttons in the console, or the new macro editor.
   covers the queue and exit codes; `verify_profile` covers macros in bundles;
   `tests/verify_macros.py` starts a real controller on an isolated session and
   asserts both steps of a two-step macro land before the first poll after the
-  trigger, plus the negative case.
+  trigger, plus the negative case; `tests/verify_engine_restart.py` asserts the
+  routing graph is live within 8 s of `--start-engine`.
 
 ## Downloads
 Assets are produced by `python3 packaging/release.py` and uploaded to this release:
@@ -77,13 +78,19 @@ host desktop session was never touched):
   `verify_stability_private.py` need a display/Xvfb that this run did not have;
   `verify_recovery.py --live` interrupts real audio and is not run unattended.
 
-**Finding carried forward, not fixed in 0.6.0:** with a microphone configured,
-`Engine::start()` stops the routing matrix while the matrix's own first launch is
-still running, so the first launch is discarded and recovery retries one full
-interval later (measured: `matrix.pid` removed at ~50 ms, engine alive again at
-~10.35 s). A pre-existing engine race, unrelated to macros; a fix belongs in
-`native/engine.cpp`/`native/routing.cpp` and should land before the release or be
-recorded here as a known issue.
+- **Engine restart race fixed.** A redundant second `Engine::start()` (the
+  `--start-engine` timer racing the early recovery path) used to land between
+  the routing matrix's first launch and its first publish and stop it, and the
+  matrix's unconditional 10 s launch backoff then delayed the graph by a full
+  retry interval (measured 10.9 s with a microphone configured). `start()` now
+  treats an identical request while starting as a no-op via a captured graph
+  signature, and a deliberate stop clears the matrix backoff. The graph comes
+  up in ~0.9 s; `tests/verify_engine_restart.py` asserts it within 8 s on a
+  private session.
+
+**Finding carried forward, not fixed in 0.6.0:** none from this pass. The
+engine start race recorded during the earlier validation round was reproduced
+with an instrumented build and fixed; see [stability notes](STABILITY.md).
 
 Unchanged from 0.5.x: no VBAN, ASIO, MIDI, external FX inserts, surround upmix or
 oversampled true-peak limiting; a standalone PulseAudio server is not supported.
