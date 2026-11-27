@@ -41,6 +41,10 @@ int runProfileTests(){try{
     auto incomplete=original;incomplete.settings.remove("gain");invalid(incomplete);
     auto bad=original;bad.settings["hardware"]=QJsonArray{};invalid(bad);
     bad=original;bad.settings["pluginRacks"]=QString("bad");invalid(bad);
+    // A macros key is part of the accepted schema now, but only in its real shape.
+    bad=original;bad.settings["macros"]=QString("bad");invalid(bad);
+    bad=original;bad.settings["macros"]=QJsonArray{QJsonObject{{"name","No steps"}}};invalid(bad);
+    bad=original;bad.settings["macros"]=QJsonArray{QJsonObject{{"name","Blank"},{"steps",QJsonArray{""}}}};invalid(bad);
     bad=original;auto a=bad.racks[0]["plugins"].toArray();auto p=a[0].toObject();p["state"]="99999999.AA";a[0]=p;bad.racks[0]["plugins"]=a;invalid(bad);
     p["state"]="1.A";a[0]=p;bad.racks[0]["plugins"]=a;invalid(bad);
     p["state"]="1.AA";p["description"]="<!DOCTYPE PLUGIN [<!ENTITY x 'oops'>]><PLUGIN name=\"&x;\"/>";a[0]=p;bad.racks[0]["plugins"]=a;invalid(bad);
@@ -53,6 +57,15 @@ int runProfileTests(){try{
     auto changed=original;changed.racks[0]=rack(true);changed.settings["gain"]=-7;
     require(installProfile(dir.path(),changed,backup,error),qPrintable(error));require(bytes(backup+"/settings.json")==QJsonDocument(original.settings).toJson(),"rollback settings backup missing");require(bytes(backup+"/plugin-racks/input0/rack.json")==QJsonDocument(original.racks[0]).toJson(),"rollback rack backup missing");
     ProfileBundle disk;require(readProfileRacks(dir.path(),disk,error)&&disk.racks==changed.racks,"rack files were not installed");
+    // A profile carrying macros validates, round-trips and reaches Settings intact.
+    auto withMacros=changed;
+    withMacros.settings["macros"]=QJsonArray{QJsonObject{{"name","Stream"},{"steps",QJsonArray{"gain mic1 -6","mute music on"}}}};
+    require(parseProfile(encodeProfile(withMacros),parsed,error),"macros-carrying profile rejected");
+    require(parsed.settings==withMacros.settings,"macros did not survive the profile round-trip");
+    Settings macroProfile;macroProfile.load(parsed.settings);
+    require(macroProfile.macros.errors.isEmpty()&&macroProfile.macros.macros.size()==1&&macroProfile.macros.macros[0].name=="Stream","profile macros did not load");
+    require(installProfile(dir.path(),withMacros,backup,error),qPrintable(error));
+    ProfileBundle stored;require(readProfile(dir.path()+"/settings.json",stored,error)&&stored.settings.value("macros").toArray().size()==1,"installed profile dropped macros");
     auto legacy=changed;legacy.legacy=true;legacy.settings["gain"]=-9;require(installProfile(dir.path(),legacy,backup,error),"legacy install failed");require(bytes(dir.path()+"/plugin-racks/input0/rack.json")==QJsonDocument(changed.racks[0]).toJson(),"legacy preset replaced plugins");
     const auto before=bytes(dir.path()+"/settings.json"),beforeRack=bytes(dir.path()+"/plugin-racks/input0/rack.json");
     const auto blocked=dir.path()+"/plugin-racks/input7";require(QFile::setPermissions(blocked,QFile::ReadOwner|QFile::ExeOwner),"cannot set failure fixture permissions");
