@@ -9,6 +9,7 @@
 #include <memory>
 #include "routing_settings.h"
 #include "recorder.h"
+#include "macros.h"
 class RoutingMatrix;
 class PluginRacks;
 class AudioHealth;
@@ -37,6 +38,7 @@ struct Settings : HardwareSettings {
     std::array<bool,8> pluginRacks{};
     RoutingSettings routing;
     RecorderSettings tape;
+    MacroSettings macros;
     QJsonObject json() const;
     void load(const QJsonObject&);
 };

@@ -43,7 +43,10 @@ void HardwareSettings::load(const QJsonObject& o){
 }
 QJsonObject Settings::json() const {
     auto o=HardwareSettings::json();QJsonArray hardware;for(int i=0;i<5;++i)hardware.append(this->hardware(i).json());
-    QJsonArray racks;for(bool enabled:pluginRacks)racks.append(enabled);o.insert("pluginRacks",racks);o.insert("engineEnabled",engineEnabled);o.insert("tape",tape.json());o.insert("version",3);o.insert("hardware",hardware);o.insert("routing",routing.json());o.insert("sink",sink);
+    QJsonArray racks;for(bool enabled:pluginRacks)racks.append(enabled);o.insert("pluginRacks",racks);o.insert("engineEnabled",engineEnabled);o.insert("tape",tape.json());o.insert("version",3);o.insert("hardware",hardware);o.insert("routing",routing.json());
+    // Only written when defined: an absent key means no macros, and profiles from older builds keep their field whitelist.
+    if(!macros.macros.isEmpty())o.insert("macros",macros.json());
+    o.insert("sink",sink);
     return o;
 }
 void Settings::load(const QJsonObject& o) {
@@ -57,6 +60,7 @@ void Settings::load(const QJsonObject& o) {
         routing.routes[0][5]=o.value("broadcast").toBool(true);routing.routes[7][0]=o.value("auxA1").toBool(true);
     }
     sink=routing.outputs[0];
+    macros.load(o);
 }
 bool Engine::writeJson(const QString& path,const QJsonObject& object) {
     QSaveFile f(path);
@@ -70,6 +74,7 @@ Engine::Engine(QObject* parent):QObject(parent),root(stateRoot()),runtime(root+"
     owned_processes::adopt(runtime,"engine");owned_processes::adopt(runtime,"matrix");
     QFile saved(root+"/settings.json");
     if(saved.open(QIODevice::ReadOnly)) settings.load(QJsonDocument::fromJson(saved.readAll()).object());
+    if(!settings.macros.errors.isEmpty()) message="Macro settings: "+settings.macros.errors.join("; ");
     health=std::make_unique<AudioHealth>(this);health->changed=[this]{notify();};
     guardCommand(discovery);guardCommand(control);guardCommand(busControl);guardCommand(auxControl);
     plugins=std::make_unique<PluginRacks>(*this);

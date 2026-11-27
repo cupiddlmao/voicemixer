@@ -1,7 +1,8 @@
 #pragma once
-#include "engine.h"
 #include <QtCore/QString>
 #include <QtCore/QStringList>
+
+struct Settings;
 
 // Remote control of a running mixer, e.g. `linux-mixer --ctl mute mic1 toggle`.
 // Targets: mic1..mic5, system, music, aux, a1..a5, b1..b3.
@@ -19,3 +20,6 @@ bool applyControlCommand(Settings& settings,const ControlCommand& command,QStrin
 int sendControlCommand(const QStringList& words,bool controllerRunning,const QString& runtimeDirectory);
 // Controller side: apply and remove queued commands; returns how many changed settings.
 int drainControlCommands(const QString& runtimeDirectory,Settings& settings,QStringList* errors=nullptr);
+
+// Existing callers include this header alone and rely on Settings being complete.
+#include "engine.h"
