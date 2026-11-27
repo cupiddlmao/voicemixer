@@ -1,6 +1,15 @@
 // Macro model, whole-macro validation and settings persistence.
 #include "macros.h"
 #include "engine.h"
+#include "macro_ui.h"
+#include <QtWidgets/QApplication>
+#include <QtWidgets/QLabel>
+#include <QtWidgets/QLineEdit>
+#include <QtWidgets/QListWidget>
+#include <QtWidgets/QPushButton>
+#include <QtCore/QFile>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QTemporaryDir>
 #include <QtCore/QTextStream>
 #include <initializer_list>
 
@@ -163,5 +172,108 @@ int runMacroTests(){
     CHECK(!flipped.hardware(0).mute);
 
     QTextStream(stdout)<<"PASS: macro model, shared step parsing and clamping, whole-macro rejection and settings persistence.\n";
+    return 0;
+}
+
+// The editor itself, opened offscreen and driven through its real widgets. The
+// engine reads settings from a temporary state directory, so saved user
+// settings are never touched.
+int runMacroEditorTest(QApplication& app) {
+    QTemporaryDir state;
+    CHECK(state.isValid());
+    qputenv("LINUX_MIXER_STATE_DIR",state.path().toUtf8());
+    Engine engine;
+    CHECK(engine.settings.macros.macros.isEmpty());
+    MacroEditor editor(engine);
+    editor.show();
+    app.processEvents();
+
+    auto* macroList=editor.findChild<QListWidget*>("macroEditorList");
+    auto* nameEdit=editor.findChild<QLineEdit*>("macroEditorName");
+    auto* stepList=editor.findChild<QListWidget*>("macroEditorSteps");
+    auto* newButton=editor.findChild<QPushButton*>("macroEditorNew");
+    auto* deleteButton=editor.findChild<QPushButton*>("macroEditorDelete");
+    auto* addButton=editor.findChild<QPushButton*>("macroEditorAddStep");
+    auto* saveButton=editor.findChild<QPushButton*>("macroEditorSave");
+    auto* status=editor.findChild<QLabel*>("macroEditorStatus");
+    auto* warning=editor.findChild<QLabel*>("macroEditorToggleWarning");
+    CHECK(macroList&&nameEdit&&stepList&&newButton&&deleteButton&&addButton&&saveButton&&status&&warning);
+
+    // A new macro with two steps, typed into the widgets the user sees.
+    newButton->click();
+    CHECK(macroList->count()==1);
+    CHECK(stepList->count()==1);
+    nameEdit->setText("Stream");
+    addButton->click();
+    CHECK(stepList->count()==2);
+    stepList->item(0)->setText("gain mic1 -6");
+    // A toggle step raises the single run-twice warning from macroContainsToggle.
+    stepList->item(1)->setText("mute music toggle");
+    CHECK(warning->text().contains("twice"));
+    stepList->item(1)->setText("mute music on");
+    CHECK(warning->text().isEmpty());
+
+    // One Save is one engine apply cycle, and the settings carry the macro.
+    int applies=0;const auto previous=engine.changed;
+    engine.changed=[&applies,previous]{++applies;if(previous)previous();};
+    saveButton->click();
+    engine.changed=previous;
+    CHECK(applies==1);
+    CHECK(engine.settings.macros.macros.size()==1);
+    CHECK(engine.settings.macros.macros.first().name=="Stream");
+    const Macro& saved=engine.settings.macros.macros.first();
+    CHECK(saved.steps.size()==2);
+    CHECK(macroStepText(saved.steps[0])=="gain mic1 -6"&&saved.steps[0].db==-6);
+    CHECK(macroStepText(saved.steps[1])=="mute music on"&&saved.steps[1].mode==ControlCommand::On);
+    {
+        QFile file(state.path()+"/settings.json");
+        CHECK(file.open(QIODevice::ReadOnly));
+        const auto macros=QJsonDocument::fromJson(file.readAll()).object().value("macros").toArray();
+        CHECK(macros.size()==1);
+        CHECK(macros[0].toObject().value("name").toString()=="Stream");
+        CHECK(macros[0].toObject().value("steps").toArray().size()==2);
+    }
+
+    // A duplicate name is refused with the specific error and nothing is saved.
+    newButton->click();
+    nameEdit->setText("stream");
+    saveButton->click();
+    CHECK(status->text().contains("duplicate macro name"));
+    CHECK(engine.settings.macros.macros.size()==1);
+    CHECK(engine.settings.macros.macros.first().name=="Stream");
+
+    // A bad step is refused with its position, and the draft is not saved.
+    nameEdit->setText("Bright");
+    addButton->click();
+    stepList->item(1)->setText("gain mic9 -6");
+    saveButton->click();
+    CHECK(status->text().contains("step 2"));
+    CHECK(engine.settings.macros.macros.size()==1);
+    CHECK(engine.settings.macros.macros.first().name=="Stream");
+
+    // Deleting the saved macro removes it on the next Save.
+    macroList->setCurrentRow(0);
+    deleteButton->click();
+    CHECK(macroList->count()==1);
+    CHECK(nameEdit->text()=="Bright");
+    stepList->item(1)->setText("mute music on");
+    saveButton->click();
+    CHECK(status->text().contains("Saved"));
+    CHECK(engine.settings.macros.macros.size()==1);
+    CHECK(engine.settings.macros.macros.first().name=="Bright");
+
+    // Deleting the last macro leaves no "macros" key in settings.json.
+    macroList->setCurrentRow(0);
+    deleteButton->click();
+    saveButton->click();
+    CHECK(engine.settings.macros.macros.isEmpty());
+    {
+        QFile file(state.path()+"/settings.json");
+        CHECK(file.open(QIODevice::ReadOnly));
+        CHECK(!QJsonDocument::fromJson(file.readAll()).object().contains("macros"));
+    }
+
+    editor.close();
+    QTextStream(stdout)<<"PASS: macro editor opened offscreen; New/Add/Rename/Save, duplicate-name and bad-step refusal, the toggle warning and deletion all behave; Save used one engine apply cycle.\n";
     return 0;
 }
