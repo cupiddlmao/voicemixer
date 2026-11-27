@@ -125,7 +125,21 @@ void Console::paintEvent(QPaintEvent*) {
     masters(p);
     p.fillRect(QRectF(7,688,1465,24),dark);
     p.setBrush(e.running?green:coral);p.setPen(Qt::NoPen);p.drawEllipse(QPointF(19,700),3,3);
-    text(p,{30,688,1100,24},QFontMetrics(QFont("DejaVu Sans",9)).elidedText(e.message,Qt::ElideRight,1090),9,e.running?ink:QColor("#e0bc9e"));
+    // Macro section: one Run button per defined macro, sharing the status row so
+    // the console gains a trigger without a new panel or a new visual language.
+    const int macroCount=e.settings.macros.macros.size();
+    text(p,{30,688,macroCount>0?510.:1100.,24},QFontMetrics(QFont("DejaVu Sans",9)).elidedText(e.message,Qt::ElideRight,macroCount>0?500:1090),9,e.running?ink:QColor("#e0bc9e"));
+    if(macroCount>0) {
+        text(p,{548,688,40,24},"MACRO",7,dim);
+        const double width=std::clamp(556./macroCount-3,34.,84.);
+        for(int i=0;i<macroCount;++i) {
+            const double x=592+i*(width+3);
+            if(x+width>1148)break;
+            const QRectF r(x,691,width,18);
+            button(p,r,QFontMetrics(QFont("DejaVu Sans",7)).elidedText(e.settings.macros.macros[i].name,Qt::ElideRight,int(width)-8),false,true,7);
+            add(r,MacroRun,"Run macro '"+e.settings.macros.macros[i].name+"' in one graph update",i);
+        }
+    }
     QString healthText="Audio health…";if(e.health->available)healthText=QString("Audio health · %1 errors").arg(e.health->errors);
     text(p,{1155,688,304,24},healthText,8,e.health->errors?coral:dim,Qt::AlignRight|Qt::AlignVCenter);add({1155,688,304,24},Health,"Audio buffer timing, processing load, node errors and plugin recovery");
 }
@@ -331,6 +345,18 @@ void Console::activate(Action a,const QPointF& pos,int first,int second) {
     case Output:chooseDevice(false,std::max(0,first));break;
     case Menu:options();break;
     case Health:audioHealth();break;
+    case MacroRun:{
+        // Copy first: runMacro replaces e.settings, so the list element would
+        // dangle across the call. A failed step leaves the settings untouched,
+        // and the reason goes to the existing status line, not a dialog.
+        if(first<0||first>=e.settings.macros.macros.size())break;
+        const Macro macro=e.settings.macros.macros.at(first);
+        QString error;
+        if(!runMacro(macro,e.settings,&error)){e.message=error;if(e.changed)e.changed();break;}
+        e.apply();e.save();
+        e.message="Macro '"+macro.name+"' applied"+(macroContainsToggle(macro)?" · contains toggle: running it twice flips it back":QString());
+        if(e.changed)e.changed();
+        break;}
     case Apps:applications(first);break;
     case Start:e.start();break;
     case Denoise:hw.denoise=!hw.denoise;e.apply();break;

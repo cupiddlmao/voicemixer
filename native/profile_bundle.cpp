@@ -34,6 +34,21 @@ bool settingsValid(const QJsonObject& settings,QString& error){
                 const auto a=value.toArray();if(a.size()!=5)return false;for(const auto& v:a)if(!v.isObject()||!check(v.toObject()))return false;
             }else if(key=="appRules"&&value.isObject()){
                 const auto rules=value.toObject();if(rules.size()>1024)return false;for(auto r=rules.begin();r!=rules.end();++r)if(r.key().size()>1024||!r.value().isDouble()||r.value().toDouble()!=r.value().toInt()||r.value().toInt()<0||r.value().toInt()>2)return false;
+            }else if(key=="macros"&&value.isArray()){
+                // Macros are a list of {"name","steps"} objects whose steps are
+                // the same text the --ctl vocabulary accepts. Their shape is
+                // checked here so an imported profile cannot smuggle a non-list
+                // into MacroSettings::load, which tolerates malformed entries.
+                const auto list=value.toArray();if(list.size()>256)return false;
+                for(const auto& entry:list){
+                    if(!entry.isObject())return false;
+                    const auto macro=entry.toObject();if(macro.size()!=2)return false;
+                    const auto name=macro.value("name");
+                    if(!name.isString()||name.toString().trimmed().isEmpty()||name.toString().size()>256||name.toString().contains(QChar::Null))return false;
+                    if(!macro.value("steps").isArray())return false;
+                    const auto steps=macro.value("steps").toArray();if(steps.isEmpty()||steps.size()>256)return false;
+                    for(const auto& step:steps)if(!step.isString()||step.toString().isEmpty()||step.toString().size()>256||step.toString().contains(QChar::Null))return false;
+                }
             }else if(value.isArray()){
                 const auto a=value.toArray();int expected=8;
                 if(key=="hardwarePan"||key=="hardwareDepth"||key=="outputs")expected=5;

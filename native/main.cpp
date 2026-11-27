@@ -20,6 +20,7 @@
 int runProfileTests();
 int runProfileFlow();
 int runControlTests();
+int runMacroTests();
 void runHealthUiTest(QApplication&,Console&);
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
@@ -61,6 +62,7 @@ int main(int argc,char** argv) {
     if(args.contains("--profile-test"))return runProfileTests();
     if(args.contains("--profile-flow-test"))return runProfileFlow();
     if(args.contains("--control-test"))return runControlTests();
+    if(args.contains("--macro-test"))return runMacroTests();
     if(args.contains("--version")){QTextStream(stdout)<<"Voicemixer "<<app.applicationVersion()<<"\n";return 0;}
     if(args.contains("--recorder-test")){runRecorderTest(app);return app.exec();}
     if(args.contains("--write-matrix")){
@@ -114,7 +116,7 @@ int main(int argc,char** argv) {
     });
     trayMenu.addSeparator();trayMenu.addAction("Quit and stop audio",&window,[&]{engine.stop();window.closeToBackground={};app.quit();});
     tray.setContextMenu(&trayMenu);QObject::connect(&tray,&QSystemTrayIcon::activated,&window,[&](QSystemTrayIcon::ActivationReason reason){if(reason==QSystemTrayIcon::Trigger||reason==QSystemTrayIcon::DoubleClick)showWindow();});
-    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{if(drainControlCommands(stateRoot()+"/.runtime",engine.settings)){engine.apply();engine.save();if(engine.changed)engine.changed();}const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();window.closeToBackground={};app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
+    QTimer reopen;reopen.setInterval(700);QObject::connect(&reopen,&QTimer::timeout,&window,[&]{QStringList controlErrors;if(drainControlCommands(stateRoot()+"/.runtime",engine.settings,&controlErrors)){engine.apply();engine.save();if(engine.changed)engine.changed();}if(!controlErrors.isEmpty()){engine.message=controlErrors.join("; ");if(engine.changed)engine.changed();}const QString muteFile=stateRoot()+"/.runtime/toggle-mic.request";if(QFile::exists(muteFile)){QFile::remove(muteFile);engine.settings.mute=!engine.settings.mute;engine.apply();engine.save();if(engine.changed)engine.changed();}const QString quitFile=stateRoot()+"/.runtime/quit.request";QFile request(quitFile);if(request.open(QIODevice::ReadOnly)){const bool stop=request.readAll()=="stop";request.close();QFile::remove(quitFile);if(stop)engine.stop();window.closeToBackground={};app.quit();return;}const QString file=stateRoot()+"/.runtime/show.request";if(QFile::exists(file)){QFile::remove(file);showWindow();}});
     if(!testing){app.setQuitOnLastWindowClosed(false);window.closeToBackground=[&]{window.hide();};tray.show();reopen.start();}
 
     window.setDesktopMaximized=[&window](bool maximize){setDesktopMaximized(window,maximize);};

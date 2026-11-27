@@ -1,7 +1,11 @@
 // Command parsing, settings changes and the on-disk command queue.
 #include "control_commands.h"
+#include "paths.h"
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
+#include <QtCore/QJsonArray>
+#include <QtCore/QJsonDocument>
+#include <QtCore/QFile>
 #include <QtCore/QTemporaryDir>
 #include <QtCore/QTextStream>
 #include <cmath>
@@ -54,6 +58,48 @@ int runControlTests(){
     CHECK(errors.isEmpty());CHECK(queued.hardware(0).mute&&queued.hardware(0).gain==-10);
     CHECK(QDir(dir.path()+"/ctl").entryList(QDir::Files).isEmpty());
     CHECK(drainControlCommands(dir.path(),queued)==0);
-    QTextStream(stdout)<<"PASS: control command parsing, clamping, rejection of bad input and the command queue.\n";
+
+    // Phase 4: the macro verb parses a name (spaces included) and rejects an
+    // empty one, and the queue runs a macro through runMacro in one command.
+    {
+        ControlCommand macro;QString macroError;
+        CHECK(parseControlCommand({"macro","Stream"},macro,macroError));
+        CHECK(macro.verb==ControlCommand::Macro&&macro.name=="Stream");
+        CHECK(parseControlCommand({"macro","Stream","Mode"},macro,macroError)&&macro.name=="Stream Mode");
+        CHECK(!parseControlCommand({"macro"},macro,macroError));
+        CHECK(!parseControlCommand({"macro","   "},macro,macroError));
+    }
+
+    // The CLI validates the name against the saved settings in stateRoot, so an
+    // unknown macro is refused with exit code 2 and never queued.
+    QTemporaryDir state;CHECK(state.isValid());
+    qputenv("LINUX_MIXER_STATE_DIR",state.path().toUtf8());
+    Settings defined;
+    defined.load(QJsonObject{{"macros",QJsonArray{QJsonObject{{"name","Stream"},
+        {"steps",QJsonArray{"gain mic1 -6","mute music on"}}}}}});
+    CHECK(defined.macros.macros.size()==1);
+    {QFile saved(state.path()+"/settings.json");CHECK(saved.open(QIODevice::WriteOnly));saved.write(QJsonDocument(defined.json()).toJson());}
+    const QString macroQueue=dir.path()+"/.runtime";
+    CHECK(sendControlCommand({"macro","Stream"},true,macroQueue)==0);
+    CHECK(sendControlCommand({"macro","Missing"},true,macroQueue)==2);
+    Settings applied;applied.load(defined.json());
+    errors.clear();
+    CHECK(drainControlCommands(macroQueue,applied,&errors)==1);
+    CHECK(errors.isEmpty());
+    CHECK(applied.hardware(0).gain==-6&&applied.routing.inputMute[1]);
+    CHECK(QDir(macroQueue+"/ctl").entryList(QDir::Files).isEmpty());
+
+    // A stale or hand-written queue step whose macro does not exist fails alone:
+    // nothing is applied, the error is reported and the queue keeps draining.
+    const QJsonObject beforeMacroStep=applied.json();
+    QFile stale(macroQueue+"/ctl/zz-stale.cmd");
+    CHECK(stale.open(QIODevice::WriteOnly));stale.write("macro Missing");stale.close();
+    errors.clear();
+    CHECK(drainControlCommands(macroQueue,applied,&errors)==0);
+    CHECK(errors.size()==1);
+    CHECK(applied.json()==beforeMacroStep);
+    CHECK(QDir(macroQueue+"/ctl").entryList(QDir::Files).isEmpty());
+
+    QTextStream(stdout)<<"PASS: control command parsing, clamping, rejection of bad input, the command queue and macro triggering through --ctl.\n";
     return 0;
 }
