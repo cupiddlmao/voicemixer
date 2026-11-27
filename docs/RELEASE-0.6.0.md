@@ -55,10 +55,35 @@ and plugin racks are retained. Macros are part of `settings.json` and travel wit
 profile bundle. See [updating without losing settings](UPDATING.md).
 
 ## Validation and limits
-VALIDATION_PLACEHOLDER — to be replaced with the recorded results of the full
-pre-release pass: ctest suite, the Python integration checks on an isolated
-session, and the numbers that fill this section honestly. Clean desktop
-installations of 0.6.0 have not been validated.
+
+Recorded on the 0.6.0 build (this machine, isolated PipeWire sessions only — the
+host desktop session was never touched):
+
+- **ctest:** 11/11 passed — `control-commands`, `complete-profiles`, `dsp`,
+  `meter-reader-thread`, `recorder-capture-thread`, `recorder-history`,
+  `recorder-links`, `owned-process-ledger`, `stability-and-updates`,
+  `macro-commands`, `macro-editor`.
+- **`tests/verify_macros.py`** passed: a two-step macro (`gain mic1 -6`,
+  `mute music on`) applied as one update, read back from the graph 422 ms after
+  the trigger; a macro whose second step fails was refused at load and from a
+  stale queue command without applying its first step.
+- **Environment-blocked, not regressions:** `verify_matrix.py`, `verify_eq_fx.py`,
+  `verify_hardware.py`, `verify_position.py` and `verify_meters.py` cannot run in
+  a private PipeWire session — WirePlumber does not manage devices there, so test
+  nodes expose no ports. A minimal reproduction without mixer code shows the same
+  failure, so it is the isolated environment, not 0.6.0. These checks pass on a
+  real desktop (0.5.x record).
+- **Skipped here:** `verify_plugins.py`, `verify_profile_private.py` and
+  `verify_stability_private.py` need a display/Xvfb that this run did not have;
+  `verify_recovery.py --live` interrupts real audio and is not run unattended.
+
+**Finding carried forward, not fixed in 0.6.0:** with a microphone configured,
+`Engine::start()` stops the routing matrix while the matrix's own first launch is
+still running, so the first launch is discarded and recovery retries one full
+interval later (measured: `matrix.pid` removed at ~50 ms, engine alive again at
+~10.35 s). A pre-existing engine race, unrelated to macros; a fix belongs in
+`native/engine.cpp`/`native/routing.cpp` and should land before the release or be
+recorded here as a known issue.
 
 Unchanged from 0.5.x: no VBAN, ASIO, MIDI, external FX inserts, surround upmix or
 oversampled true-peak limiting; a standalone PulseAudio server is not supported.
