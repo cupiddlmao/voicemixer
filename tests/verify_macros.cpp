@@ -105,6 +105,44 @@ int runMacroTests(){
     CHECK(!validateMacro(mixedSteps,QList<Macro>{},error));
     CHECK(!error.isEmpty());
 
+    // Refusal paths. A step naming another macro is refused by the validator with
+    // its own message, not by the generic target or verb check.
+    Macro nested;nested.name="Chain";
+    ControlCommand nestedStep;CHECK(parseMacroStep("macro Other",nestedStep,error));
+    CHECK(nestedStep.verb==ControlCommand::Macro&&nestedStep.name=="Other");
+    nested.steps.append(nestedStep);
+    error.clear();
+    CHECK(!validateMacro(nested,QList<Macro>{},error));
+    CHECK(error.contains("cannot call another macro"));
+    // The verb is classified as a graph rebuild, which is the second, independent
+    // reason a macro step is refused; the parameter verbs are the only safe class.
+    CHECK(commandScope(ControlCommand::Macro)==CommandScope::GraphRebuild);
+    for(const auto verb:{ControlCommand::Mute,ControlCommand::Gain,ControlCommand::Bypass,ControlCommand::Denoise})
+        CHECK(commandScope(verb)==CommandScope::Parameter);
+    // A macro step has no canonical text, so it cannot round-trip into a saved
+    // step list: json() would write an empty string the loader then rejects.
+    CHECK(macroStepText(nestedStep).isEmpty());
+    {ControlCommand reparse;CHECK(!parseMacroStep(macroStepText(nestedStep),reparse,error));}
+    // runMacro refuses it too, before touching any settings.
+    Settings nestedRun;nestedRun.hardware(0).gain=2;const QJsonObject nestedBefore=nestedRun.json();
+    CHECK(!runMacro(nested,nestedRun,&error));
+    CHECK(error.contains("cannot call another macro"));
+    CHECK(nestedRun.json()==nestedBefore);
+    // At load time a hand-built list carrying that step is rejected with the same
+    // error, and the macro's valid first step is not applied either.
+    Settings nestedLoad;
+    nestedLoad.load(settingsWith(macrosArray({macroJson("Chain",{"gain mic1 -6","macro Other"})})));
+    CHECK(nestedLoad.macros.macros.isEmpty());
+    CHECK(nestedLoad.macros.errors.size()==1);
+    CHECK(nestedLoad.macros.errors.first().contains("cannot call another macro"));
+    CHECK(nestedLoad.hardware(0).gain==0);
+    // One nested macro does not take its well-formed neighbour down with it.
+    Settings nestedMixed;
+    nestedMixed.load(settingsWith(macrosArray({macroJson("Good",{"gain mic1 -6"}),macroJson("Chain",{"macro Good"})})));
+    CHECK(nestedMixed.macros.macros.size()==1);
+    CHECK(nestedMixed.macros.macros.first().name=="Good");
+    CHECK(nestedMixed.macros.errors.size()==1);
+
     // Validation also enforces a non-empty name, at least one step and a unique name.
     Macro unnamed;CHECK(!validateMacro(unnamed,QList<Macro>{},error));
     Macro silent;silent.name="Silent";CHECK(!validateMacro(silent,QList<Macro>{},error));
@@ -171,7 +209,7 @@ int runMacroTests(){
     CHECK(runMacro(flip,flipped,&runError));
     CHECK(!flipped.hardware(0).mute);
 
-    QTextStream(stdout)<<"PASS: macro model, shared step parsing and clamping, whole-macro rejection and settings persistence.\n";
+    QTextStream(stdout)<<"PASS: macro model, shared step parsing and clamping, whole-macro rejection (including the nested-macro refusal and its load-time rejection), and settings persistence.\n";
     return 0;
 }
 
