@@ -2,9 +2,9 @@
 
 > **Planned for the next release, 0.6.0.** Macros are not part of any published
 > release yet. What this file describes exists only on the development `main`
-> branch: the model, validation, execution, the run buttons in the console and the
-> `--ctl macro` trigger are implemented there and tested as described below. The
-> editor dialog is not — it is Phase 5 and is still being written.
+> branch: the model, validation, execution, the editor dialog, the run buttons in
+> the console and the `--ctl macro` trigger are implemented there and tested as
+> described below.
 
 This document follows the plan in [the 0.6.0 feature plan](PLAN-0.6.0.md), sections 4
 and Phase 6, and describes what the code on `main` actually does. Where something is
@@ -85,11 +85,10 @@ unless you genuinely want a switch. The same applies to a macro whose target is
 changed by hand between runs: the macro has no memory, so it cannot know the strip was
 muted by someone else.
 
-There is no editor to flag this yet (see "The editor" below), but the information the
-editor will need is already computed: `macroContainsToggle()` walks the steps on
-demand, so it cannot go stale after an edit, and it only counts verbs that actually
-carry an on/off mode — `gain` keeps the default mode value and is not reported as a
-toggle. The console uses the same check after a run and appends
+The editor flags this when it loads or edits a macro: `macroContainsToggle()` walks
+the steps on demand, so it cannot go stale after an edit, and it only counts verbs that
+actually carry an on/off mode — `gain` keeps the default mode value and is not reported
+as a toggle. The console uses the same check after a run and appends
 `· contains toggle: running it twice flips it back` to the status line.
 
 ## Running a macro from the console
@@ -112,8 +111,8 @@ Two limits are worth stating plainly:
 
 - The macro row is a fixed width strip in a status bar, not a panel. Roughly fifteen
   buttons fit before the row runs into the audio-health readout; macros beyond that
-  are simply not drawn, and there is no scrolling or overflow menu. Use `--ctl` for
-  those until the editor exists.
+  are simply not drawn, and there is no scrolling or overflow menu. Use `--ctl` or the
+  editor for those.
 - The status text shares the row, so when macros are present it is elided to about
   500 px. A long failure message can be cut off in the window; the full text is the
   same message the command path reports.
@@ -250,17 +249,22 @@ per-macro validity is decided afterwards by the same validation every other path
 
 ## The editor
 
-**Planned, not written.** Phase 5 — a plain dialog with the macro list, step rows, Run
-and Test buttons and a status line reporting the first failing step — is being written
-now and is not in this tree. There is no way to create or edit a macro from the
-interface yet; until there is, macros are defined by editing `settings.json` while the
-controller is stopped.
+Implemented as `native/macro_ui.cpp`, opened from the console **Menu**. It is a plain
+dialog in the `profile_ui.cpp`/`recorder_ui.cpp` style: the macro list on the left,
+editable step rows on the right (each step shown as its canonical `--ctl` text),
+New/Delete macro, Add/Remove step, Rename, Run and Test buttons, and one status line
+that names the first failing step after a run or a validation failure. A macro that
+contains a toggle shows the run-twice warning once in the editor.
 
-The pieces the editor will use are already in place and tested: `validateMacro()` for
-whole-macro validation against the existing list, `macroContainsToggle()` for the
-warning, and `runMacro()` which reports the failing step. Its intended conventions are
-the ones in `profile_ui.cpp` and `recorder_ui.cpp` — no new visual language, no new
-icons. Nothing else about it is promised here.
+Edits accumulate in a draft list and nothing reaches the engine settings until **Save**
+validates the whole draft with `validateMacro()` against the other macros — duplicate
+names and bad steps are refused with the specific error — and then issues exactly one
+`engine.apply()` and `engine.save()`. **Test** only validates the current draft and
+changes nothing; **Run** applies the selected saved macro through `runMacro()` and
+saves. A new macro is seeded with one default step so it is valid immediately, since a
+macro with no steps cannot pass validation. Deleting or renaming a macro that a queued
+`--ctl` command still names is not compensated for: the drain path already reports the
+unknown macro when that command runs.
 
 ## Verification and scope
 
@@ -302,6 +306,14 @@ with `--macro-test`, offscreen, 30 s) covers the model and validation:
 malformed `macros` shapes are rejected, and a profile carrying a valid macro validates,
 survives the bundle round-trip, reaches `Settings` intact and is preserved when the
 profile is installed.
+
+**`macro-editor` ctest** (also `tests/verify_macros.cpp`, `--macro-editor-test`, its
+own case in `CMakeLists.txt`) covers the dialog headlessly, running its own `Engine`
+against a temporary state directory so it never touches a real `settings.json`:
+creating a macro with two steps and saving carries it into the engine settings with a
+single apply cycle; a duplicate name and a bad step each leave the saved settings
+untouched and the status line names the first failing step; deleting removes the macro;
+Run applies the selected macro; Test only validates.
 
 Three things are not covered and should be reported as untested rather than as
 working:
