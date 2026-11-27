@@ -9,6 +9,8 @@ convert it here. No display, no compositor screenshot, no PipeWire node.
   ./tests/shot_rack.py build out.png
   ./tests/shot_rack.py build out.png --populated   # a real rack with plugins loaded
 
+--bypassed marks those slots bypassed so the engaged toggle state is visible.
+
 --populated loads the test VST3 fixture into the rack, because a design judged
 only against an empty combo tends to fall apart once a plugin is present. The
 fixture is scanned with the host's own --probe, so the rack state is written in
@@ -27,6 +29,7 @@ import tempfile
 def main():
     argv = [a for a in sys.argv[1:] if not a.startswith("--")]
     populated = "--populated" in sys.argv
+    bypassed = "--bypassed" in sys.argv
     if len(argv) != 2:
         print(__doc__.strip())
         return 2
@@ -57,7 +60,7 @@ def main():
                 print("--probe found no plugin types in the fixture")
                 return 1
             json.dump({"plugins": [
-                {"description": d, "name": "Mixer Test Gain", "state": "", "disabled": False}
+                {"description": d, "name": "Mixer Test Gain", "state": "", "bypass": bypassed}
                 for d in (descriptions * 2)[:2]
             ]}, open(os.path.join(folder, "rack.json"), "w"))
         # No PipeWire is reachable in this environment on purpose: render-only
