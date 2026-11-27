@@ -21,6 +21,7 @@ int runProfileTests();
 int runProfileFlow();
 int runControlTests();
 int runMacroTests();
+int runMacroEditorTest(QApplication&);
 void runHealthUiTest(QApplication&,Console&);
 void runRecorderTest(QApplication&);
 void runSmoke(QApplication&,Engine&,Console&);
@@ -63,6 +64,7 @@ int main(int argc,char** argv) {
     if(args.contains("--profile-flow-test"))return runProfileFlow();
     if(args.contains("--control-test"))return runControlTests();
     if(args.contains("--macro-test"))return runMacroTests();
+    if(args.contains("--macro-editor-test"))return runMacroEditorTest(app);
     if(args.contains("--version")){QTextStream(stdout)<<"Voicemixer "<<app.applicationVersion()<<"\n";return 0;}
     if(args.contains("--recorder-test")){runRecorderTest(app);return app.exec();}
     if(args.contains("--write-matrix")){

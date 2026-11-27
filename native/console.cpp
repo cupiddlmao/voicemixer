@@ -5,6 +5,7 @@
 #include <QtWidgets/QApplication>
 #include "routing.h"
 #include "plugin_racks.h"
+#include "macro_ui.h"
 #include <QtGui/QPainter>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QWheelEvent>
@@ -314,6 +315,7 @@ void Console::options(){
     m.addSeparator();m.addAction("Tape recorder options…",this,[this]{recorderOptions();});m.addAction("Replay tape from start",this,[this]{e.recorder->seek(0);if(!e.recorder->playing)e.recorder->play();});m.addAction("Eject tape",this,[this]{e.recorder->eject();});
     m.addAction("Gate attack / release…",this,[this]{timing();});
     m.addAction("Reset color panel",this,[this]{e.settings.colorX=e.settings.colorY=.5;e.apply();});
+    m.addAction("Macro editor…",this,[this]{showMacroEditor(e,this);});
     m.addSeparator();
     m.addAction("Back up complete profile…",this,[this]{e.exportPreset(QFileDialog::getSaveFileName(this,"Back up complete mixer profile",{},"Mixer profile / legacy preset (*.json)"));});
     m.addAction("Restore profile / preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Restore mixer profile / preset",{},"Mixer profile / legacy preset (*.json)");if(!f.isEmpty())e.importPreset(f);});
