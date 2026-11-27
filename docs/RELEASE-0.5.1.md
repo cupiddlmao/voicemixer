@@ -44,9 +44,11 @@ restarted once after the update.
 ## Validation and limits
 Passed the eight-case `ctest` suite on the 0.5.1 build (PipeWire 1.6.11,
 Qt 6.10.2), including the new teardown and queued-link cases, and `--version` reports
-0.5.1. Clean Ubuntu, Arch and Gentoo installations of 0.5.1 have not been independently
-validated; the 0.5.0 validation record still applies to everything except the three fixes
-above.
+0.5.1. On 0.5.1 the Arch kit (makepkg, ctest, pacman install) and the Gentoo kit
+(build.sh check/build/test/install) were additionally validated in clean Arch
+and Gentoo stage3 containers, without an audio session; a desktop install of 0.5.1 on a
+different machine has not been validated. The 0.5.0 validation record still applies to
+everything except the three fixes above.
 
 Unchanged from 0.5.0: no VBAN, ASIO, MIDI, macro control, external FX inserts, surround
 upmix or parametric master EQ; the bus limiter is a sample-peak limiter, not oversampled

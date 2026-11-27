@@ -3,11 +3,12 @@
 A native Linux audio mixer for PipeWire, with five hardware inputs, three virtual
 app inputs, eight output buses, voice processing and a tape recorder.
 
-**Early release:** tested on Ubuntu 26.04 and Arch Linux (CachyOS); the native
-build, mixer and audio/plugin checks work on CachyOS, but the `makepkg` recipe
-has not yet been run in a clean Arch installation. A
-[Gentoo/KDE source-build kit](docs/GENTOO-INSTALL.txt)
-is also available and has not yet been tested on Gentoo. See [Arch setup](docs/ARCH-INSTALL.txt) and
+**Early release:** tested on Ubuntu 26.04 and Arch Linux (CachyOS). The `makepkg`
+recipe, test suite and `pacman` install were additionally validated in a clean
+Arch Linux container, and the [Gentoo/KDE source-build kit](docs/GENTOO-INSTALL.txt)
+in a clean Gentoo stage3 container (build, tests and per-user install pass; neither
+container has an audio session, so desktop validation remains CachyOS and Ubuntu
+26.04). See [Arch setup](docs/ARCH-INSTALL.txt) and
 [recorder instructions](docs/RECORDER.md). The executable and virtual devices
 currently retain their `linux-mixer` / **Linux Mixer** names for compatibility.
 
@@ -200,11 +201,12 @@ release script to install Voicemixer. Download the matching files from the
   run `makepkg -si` in the extracted folder as your normal user. This builds an
   Arch-native package from the included, checksummed source. The native 0.5.0
   build, mixer and audio/plugin checks are tested on CachyOS; the `makepkg`
-  recipe has not yet been run in a clean Arch installation, so read
-  `INSTALL.txt` first.
+  recipe and the test suite have been validated in a clean Arch container; a
+  container has no audio session, so runtime behaviour is validated on CachyOS.
 - **Gentoo/KDE:** download `linux-mixer-0.5.1-gentoo-friend.zip`, extract it and
   follow `INSTALL.txt`. This is a per-user source build, not a prebuilt package
-  or Portage ebuild; it has not been validated on Gentoo.
+  or Portage ebuild; its build, tests and install were validated in a clean
+  Gentoo stage3 container, without an audio session.
 - **Other Linux versions:** use `linux-mixer-0.5.1-source.tar.gz` and the build
   instructions above. Other Ubuntu releases have not been validated.
 
@@ -241,7 +243,11 @@ Full details, including migrating from a source-folder launch, are in
 ## Validation and limits
 
 Tested here: Ubuntu 26.04 and CachyOS (Arch-based), PipeWire 1.6.2/1.6.10,
-Qt 6.10.2 and a Razer Seiren Mini. On CachyOS, the 0.5.0 native build and all
+Qt 6.10.2 and a Razer Seiren Mini. On 0.5.1, the Arch kit's `makepkg` build,
+nine-case `ctest` run and `pacman` install also passed in a clean Arch Linux
+container, and the Gentoo kit's `build.sh` (check, build, nine-case `ctest`,
+per-user install) passed in a clean Gentoo stage3 container against
+PipeWire 1.6.12 and Qt 6.11.3; containers have no audio session. On CachyOS, the 0.5.0 native build and all
 five virtual-feed integration checks passed: matrix, EQ/FX, hardware, position
 and plugins. The real Auto-Tune/Wider rack was not part of that final pass. Five
 simultaneous hardware chains are exercised with virtual interfaces; five

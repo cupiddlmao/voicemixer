@@ -3,8 +3,11 @@ VOICEMIXER 0.5.1 — GENTOO / KDE SETUP
 This ZIP is a source-build kit, not a prebuilt Gentoo binary or Portage ebuild.
 It includes the same 0.5.1 source used by the other release downloads. Build and
 install it locally as your normal desktop user. Primary target: amd64 with a
-working Gentoo KDE desktop. This kit has NOT been tested on an actual Gentoo
-machine. Other architectures, musl and Gentoo Prefix have not been validated.
+working Gentoo KDE desktop. For 0.5.1 the kit's build.sh (dependency check,
+build, nine-case ctest suite and per-user install) was validated in a clean
+Gentoo stage3 container against PipeWire 1.6.12 and Qt 6.11.3; a container has
+no audio session, so it has NOT been tested on an actual Gentoo desktop with
+real devices. Other architectures, musl and Gentoo Prefix have not been validated.
 No personal settings or recordings are included.
 
 1. CHECK THE AUDIO SERVER IN KDE
@@ -38,6 +41,9 @@ The PipeWire extra flag supplies pw-record/pw-play. The sound-server flag enable
 its role as the desktop audio server, and pulseaudio enables Pulse support.
 The FFmpeg lame flag is needed for MP3 recording. Keep the flags your desktop
 already needs; do not replace your entire package.use configuration.
+Emerging pipewire[pulseaudio] and qtbase[gui] can pull transitive USE changes
+(such as libpulse[X], alsa-plugins[pulseaudio] or libxkbcommon[X]); if emerge
+reports required USE changes, review them and apply with --autounmask-write.
 For a Wayland session, keep Qt's Wayland support and qtwayland enabled/installed.
 
 After reviewing Portage's plan, install dependencies as root (or using sudo):
