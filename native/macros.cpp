@@ -7,6 +7,9 @@ static QString verbText(ControlCommand::Verb verb) {
     case ControlCommand::Gain: return "gain";
     case ControlCommand::Bypass: return "bypass";
     case ControlCommand::Denoise: return "denoise";
+    // Never valid as a step; named here so a hand-built one can round-trip
+    // through validateStep's rejection instead of silently becoming text.
+    case ControlCommand::Macro: return "macro";
     }
     return QString();
 }
@@ -22,6 +25,8 @@ static QString targetText(const ControlCommand& c) {
 }
 
 QString macroStepText(const ControlCommand& c) {
+    // A macro verb has no target to print, and a macro may not contain one.
+    if(c.verb==ControlCommand::Macro)return QString();
     const QString verb=verbText(c.verb),target=targetText(c);
     if(verb.isEmpty()||target.isEmpty())return QString();
     QString text=verb+' '+target;
@@ -44,6 +49,10 @@ CommandScope commandScope(ControlCommand::Verb verb) {
     case ControlCommand::Bypass:
     case ControlCommand::Denoise:
         return CommandScope::Parameter;
+    case ControlCommand::Macro:
+        // Calling a macro from a step would nest runs and lose the single-apply
+        // boundary, so it is refused like a graph-rebuilding verb.
+        return CommandScope::GraphRebuild;
     }
     // A verb that nobody classified above is refused rather than assumed safe.
     return CommandScope::GraphRebuild;
@@ -82,6 +91,10 @@ static bool validateStep(const ControlCommand& step,const QString& macroName,int
     if((step.verb==ControlCommand::Bypass||step.verb==ControlCommand::Denoise)&&step.kind!=ControlCommand::Mic){
         error=QString("macro '%1' step %2: %3 applies only to mic1-5")
                   .arg(macroName).arg(position).arg(verbText(step.verb));
+        return false;
+    }
+    if(step.verb==ControlCommand::Macro){
+        error=QString("macro '%1' step %2: a macro cannot call another macro").arg(macroName).arg(position);
         return false;
     }
     if(commandScope(step.verb)!=CommandScope::Parameter){

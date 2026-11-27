@@ -31,7 +31,7 @@ private:
     Engine& e;
     std::unique_ptr<UpdateChecker> updates;
     enum Action { None, Mic, Output, Start, Menu, Comp, Gate, Denoise, Bypass,
-                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono, Health };
+                  Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono, Health, MacroRun };
     struct Hit {QRectF rect;Action action;QString tip;int first=-1,second=-1;};
     std::vector<Hit> hits;
     Action dragging=None;
