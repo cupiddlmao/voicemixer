@@ -191,7 +191,7 @@ sudo cmake --install build
 
 This is where to get a copy for another computer; you do **not** need to run the
 release script to install Voicemixer. Download the matching files from the
-[v0.5.1 preview release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.5.1):
+[the v0.5.1 release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.5.1):
 
 - **Ubuntu 26.04 amd64:** download `linux-mixer-0.5.1-ubuntu26.04-x86_64.deb`
   and install with `sudo apt install ./linux-mixer-0.5.1-ubuntu26.04-x86_64.deb`.

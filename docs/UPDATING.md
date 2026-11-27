@@ -77,8 +77,9 @@ is a separate action.
 
 Startup checks are off by default. You may enable **Check at startup** for at
 most one successful check per day. **Include preview releases** controls whether
-preview releases are offered. Voicemixer currently publishes preview builds,
-so leave that option enabled to receive those updates. The Menu button shows
+preview releases are offered. Voicemixer 0.5.1 is a full release; earlier previews
+used the same tag naming, so leave that option enabled unless you only want final
+releases. The Menu button shows
 an update label when a newer version has been found. Preferences live in
 `update-preferences.ini` beside your mixer settings and are included when you
 back up the profile folder.
