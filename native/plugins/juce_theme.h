@@ -35,11 +35,42 @@ constexpr int title=20, section=16, label=13, value=11, micro=10;
 
 inline juce::Colour colour(juce::uint32 value) { return juce::Colour(value); }
 
-// JUCE measures a font by ascent + descent where Qt measures it by pixel size;
-// 1.22 on DejaVu Sans puts rack text at the same size as the console's.
+// JUCE scales glyphs by a typeface's ascent+descent, not by its em box, so a
+// "13" here would draw the console's 13px step at about 11px. DejaVu Sans's
+// ascent+descent is 1.164 em; converting keeps the rack on the console scale.
+constexpr float emScale = 1.164f;
+
+// One family, the one ui_theme.h asks Qt for, falling back to whatever sans
+// the platform has so text never disappears.
 inline juce::Font font(int px, bool bold = false, float kerning = 0.0f)
 {
-    juce::Font f("DejaVu Sans", float(px) * 1.22f, bold ? juce::Font::bold : juce::Font::plain);
+    static const juce::String family = []
+    {
+        return juce::Font::findAllTypefaceNames().contains("DejaVu Sans", true)
+                   ? juce::String("DejaVu Sans")
+                   : juce::Font::getDefaultSansSerifFontName();
+    }();
+    // JUCE's Linux lookup takes a family's first face when the style is empty,
+    // which is the oblique face of DejaVu Sans. Name the face it should use.
+    static const juce::String plainFace = []
+    {
+        const auto styles = juce::Font::findAllTypefaceStyles(family);
+        for (const char* name : { "Book", "Regular", "Roman" })
+            if (styles.contains(name, true))
+                return juce::String(name);
+        return juce::String();
+    }();
+    static const juce::String boldFace = []
+    {
+        const auto styles = juce::Font::findAllTypefaceStyles(family);
+        for (const char* name : { "Bold", "Semi Bold", "Demi Bold" })
+            if (styles.contains(name, true))
+                return juce::String(name);
+        return juce::String();
+    }();
+
+    juce::Font f(family, float(px) * emScale, bold ? juce::Font::bold : juce::Font::plain);
+    f.setTypefaceStyle(bold ? boldFace : plainFace);
     if (kerning != 0.0f)
         f.setExtraKerningFactor(kerning);
     return f;
