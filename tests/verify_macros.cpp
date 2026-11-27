@@ -102,6 +102,23 @@ int runMacroTests(){
     Macro duplicateMacro;duplicateMacro.name="speak";duplicateMacro.steps.append(valid);
     CHECK(!validateMacro(duplicateMacro,duplicate.macros.macros,error));
 
+    // Toggle steps are accepted, but a computed marker reports them so an editor
+    // can warn that running the macro twice flips twice.
+    Macro toggleMacro;toggleMacro.name="Flip";
+    ControlCommand toggleStep;CHECK(parseMacroStep("mute mic1 toggle",toggleStep,error));
+    toggleMacro.steps.append(toggleStep);
+    CHECK(validateMacro(toggleMacro,QList<Macro>{},error));
+    CHECK(macroContainsToggle(toggleMacro));
+    Macro explicitMacro;explicitMacro.name="Explicit";
+    ControlCommand onStep;CHECK(parseMacroStep("mute music on",onStep,error));
+    explicitMacro.steps.append(onStep);
+    CHECK(!macroContainsToggle(explicitMacro));
+    // Gain has no on/off meaning and keeps Mode at its default; it is not a toggle.
+    Macro gainOnly;gainOnly.name="Trim";
+    ControlCommand trim;CHECK(parseMacroStep("gain aux -3",trim,error));
+    gainOnly.steps.append(trim);
+    CHECK(!macroContainsToggle(gainOnly));
+
     QTextStream(stdout)<<"PASS: macro model, shared step parsing and clamping, whole-macro rejection and settings persistence.\n";
     return 0;
 }
