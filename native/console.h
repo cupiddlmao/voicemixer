@@ -24,11 +24,13 @@ protected:
     void mousePressEvent(QMouseEvent*) override;
     void mouseMoveEvent(QMouseEvent*) override;
     void mouseReleaseEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
     void mouseDoubleClickEvent(QMouseEvent*) override;
     void wheelEvent(QWheelEvent*) override;
     void contextMenuEvent(QContextMenuEvent*) override;
 private:
     friend void runHealthUiTest(QApplication&,Console&);
+    friend int runHitRegionTest(Console&);   // tests/verify_hit_regions.cpp, no audio needed
     Engine& e;
     std::unique_ptr<UpdateChecker> updates;
     // The one MIDI reader. It lives here, not in the engine, because starting and

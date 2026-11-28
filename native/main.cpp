@@ -3,10 +3,12 @@
 #include "engine.h"
 #include "console.h"
 #include "control_commands.h"
+#include "ui_theme.h"
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QSystemTrayIcon>
 #include <QtWidgets/QMenu>
 #include <QtGui/QPainter>
+#include <QtGui/QPalette>
 #include <QtCore/QStandardPaths>
 #include <QtGui/QIcon>
 #include <QtCore/QLockFile>
@@ -29,6 +31,32 @@ void runPositionTest(QApplication&,Engine&,Console&);
 void runPluginRoutingTest(QApplication&,Engine&,Console&);
 void runLiveControlsTest(QApplication&,Engine&,Console&);
 void runAppRoutingTest(QApplication&,Engine&);
+
+// A complete dark palette for the dialogs that never style themselves. The
+// three static QFileDialog calls in console.cpp cannot call styleMixerDialog(),
+// so they fell back to Fusion's light defaults in the middle of a dark app.
+// Palette roles, not a stylesheet: the hand-painted console is all QPainter and
+// the dialogs that carry their own palette or QSS keep overriding this one.
+static QPalette darkPalette() {
+    using namespace theme;
+    QPalette p;
+    p.setColor(QPalette::Window,bg);p.setColor(QPalette::WindowText,ink);
+    p.setColor(QPalette::Base,bg);p.setColor(QPalette::AlternateBase,panel);
+    p.setColor(QPalette::Text,ink);p.setColor(QPalette::Button,panelRaised);p.setColor(QPalette::ButtonText,ink);
+    p.setColor(QPalette::BrightText,danger);
+    p.setColor(QPalette::Highlight,accentDim);p.setColor(QPalette::HighlightedText,ink);
+    p.setColor(QPalette::ToolTipBase,panelRaised);p.setColor(QPalette::ToolTipText,ink);
+    p.setColor(QPalette::PlaceholderText,inkMuted);
+    p.setColor(QPalette::Link,accent);p.setColor(QPalette::LinkVisited,accentDim);
+    // Bevel roles: Fusion derives button edges and sunken frames from these, so
+    // the light defaults would outline every dark control.
+    p.setColor(QPalette::Light,borderStrong);p.setColor(QPalette::Midlight,border);
+    p.setColor(QPalette::Mid,panel);p.setColor(QPalette::Dark,bg.darker(125));p.setColor(QPalette::Shadow,bg.darker(150));
+    for(auto role:{QPalette::Text,QPalette::WindowText,QPalette::ButtonText,QPalette::PlaceholderText})p.setColor(QPalette::Disabled,role,inkMuted);
+    p.setColor(QPalette::Disabled,QPalette::Base,panel);p.setColor(QPalette::Disabled,QPalette::Button,panel);
+    p.setColor(QPalette::Disabled,QPalette::Highlight,panelRaised);
+    return p;
+}
 
 static void setDesktopMaximized(Console& window,bool maximize) {
     if(maximize)window.showMaximized();else window.showNormal();
@@ -59,6 +87,7 @@ static void setDesktopMaximized(Console& window,bool maximize) {
 int main(int argc,char** argv) {
     QApplication app(argc,argv);app.setApplicationName("Linux Mixer");app.setOrganizationName("PersonalAudio");
     app.setApplicationVersion(VOICEMIXER_VERSION);app.setStyle("Fusion");
+    app.setPalette(darkPalette());
     const auto args=app.arguments();
     if(args.contains("--profile-test"))return runProfileTests();
     if(args.contains("--profile-flow-test"))return runProfileFlow();

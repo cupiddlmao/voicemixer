@@ -11,14 +11,22 @@
 #include <unistd.h>
 #include "wider_controls.h"
 #include "autotune_controls.h"
+#include "rack_look_and_feel.h"
 using namespace juce;
 namespace {
 constexpr int maxFrames=8192;
 struct Slot { PluginDescription description;std::unique_ptr<AudioPluginInstance> plugin;bool bypass=false;AudioBuffer<float> audio; };
 using voicemixer::WiderControls;
+using voicemixer::RackLookAndFeel;
+namespace role=voicemixer::rack_role;
+// Set by --render-ui. Photographing the rack must not need PipeWire: without
+// this, Rack's constructor quits the whole app on a failed connection before
+// the flag is ever read, and a UI review would create a node in the user's
+// live graph.
+bool renderOnly=false;
 struct Editor : DocumentWindow {
     bool deferAutosave=false;
-    Editor(AudioPluginInstance& p,bool generic=false,bool original=false):DocumentWindow(p.getName()+(generic?" - Parameters":""),Colour(0xff344a57),DocumentWindow::closeButton){setUsingNativeTitleBar(true);AudioProcessorEditor* content=nullptr;
+    Editor(AudioPluginInstance& p,bool generic=false,bool original=false):DocumentWindow(p.getName()+(generic?" - Parameters":""),rack_theme::colour(rack_theme::bg),DocumentWindow::closeButton){setUsingNativeTitleBar(true);AudioProcessorEditor* content=nullptr;
         if(!generic&&!original&&p.getName().equalsIgnoreCase("Wider"))content=new WiderControls(p);
         else if(!generic&&!original&&p.getName().equalsIgnoreCase("Auto-Tune Pro"))content=new voicemixer::AutoTuneControls(p);
         else content=!generic&&p.hasEditor()?p.createEditorIfNeeded():new GenericAudioProcessorEditor(p);
@@ -35,23 +43,120 @@ public:
     std::atomic<double> requestedRate{48000},rate{48000};
     std::atomic<bool> failed{false},streaming{false},stateDirty{true};
     std::atomic<uint64_t> callbacks{0};uint64_t lastCallbacks=0,heartbeatSequence=0;int stalledTicks=0;
+    RackLookAndFeel look;int rulerX[3]{-1,-1,-1};bool statusIsMessage=false;
     TextButton hideButton{"Hide rack"};
     TextButton add{"Add VST3 / LADSPA"},remove{"Remove"},edit{"Open editor"},parameters{"Parameters"},original{"Plugin UI"},bypass{"Bypass"},up{"Move up"},down{"Move down"};
     ComboBox list;Label status;std::unique_ptr<FileChooser> chooser;int ticks=0,operationDepth=0;bool saving=false,editorWasOpen=false,incompleteLoad=false;
     explicit Rack(File dir,String node,String label):folder(dir),nodeName(node),title(label){
+        setLookAndFeel(&look);
         folder.createDirectory();formats.addDefaultFormats();
         publishVisibility(false);
+        // Four jobs in one row: manage the rack, inspect the plugin, change its
+        // state, reorder it. The component ID is the job, so the look-and-feel
+        // draws the difference and no button carries its own colours.
+        add.setComponentID(role::primary);
+        remove.setComponentID(role::destructive);
+        bypass.setComponentID(role::toggle);
+        up.setComponentID(role::secondary);down.setComponentID(role::secondary);
+        hideButton.setComponentID(role::quiet);
         for(auto* b:{&add,&remove,&edit,&parameters,&original,&bypass,&up,&down})addAndMakeVisible(b);
         addAndMakeVisible(hideButton);hideButton.onClick=[this]{if(hide)hide();};
-        addAndMakeVisible(list);addAndMakeVisible(status);status.setText("Stereo insert - native VST3 / LADSPA - Windows VST3 via yabridge",dontSendNotification);
+        addAndMakeVisible(list);addAndMakeVisible(status);
+        list.onChange=[this]{refreshChrome();};
+        status.setText("Stereo insert - native VST3 / LADSPA - Windows VST3 via yabridge",dontSendNotification);styleStatus();
         add.onClick=[this]{choose();};remove.onClick=[this]{change(0);};bypass.onClick=[this]{change(1);};up.onClick=[this]{change(2);};down.onClick=[this]{change(3);};edit.onClick=[this]{openEditor();};parameters.onClick=[this]{openEditor(true);};original.onClick=[this]{openEditor(false,true);};
         load();refreshList();setSize(850,190);startAudio();startTimer(250);
     }
-    ~Rack() override{stopTimer();if(loop){pw_thread_loop_stop(loop);if(filter)pw_filter_destroy(filter);pw_thread_loop_destroy(loop);}save();editors.clear();for(auto& s:slots){s.plugin->removeListener(this);s.plugin->releaseResources();}}
-    void paint(Graphics& g) override{g.fillAll(Colour(0xff344a57));g.setColour(Colour(0xff8be1bd));g.setFont(18);g.drawText(title+" - Plugin rack",12,8,getWidth()-134,26,Justification::centredLeft);}
+    ~Rack() override{setLookAndFeel(nullptr);stopTimer();if(loop){pw_thread_loop_stop(loop);if(filter)pw_filter_destroy(filter);pw_thread_loop_destroy(loop);}save();editors.clear();for(auto& s:slots){s.plugin->removeListener(this);s.plugin->releaseResources();}}
+    void paint(Graphics& g) override{
+        g.fillAll(rack_theme::colour(rack_theme::bg));
+        const auto lead=rack_theme::font(rack_theme::type::section,true);
+        const auto leadWidth=juce::roundToInt(lead.getStringWidthFloat(title));
+        g.setFont(lead);g.setColour(rack_theme::colour(rack_theme::ink));
+        g.drawText(title,rack_theme::gutter,7,leadWidth+2,26,Justification::centredLeft,false);
+        // The node name is the title. "Plugin rack" only says which window this
+        // is, so it drops a step in size and the muted colour.
+        g.setFont(rack_theme::font(rack_theme::type::label));g.setColour(rack_theme::colour(rack_theme::inkMuted));
+        g.drawText(" - Plugin rack",rack_theme::gutter+leadWidth,8,200,26,Justification::centredLeft,false);
+        g.setColour(rack_theme::colour(rack_theme::border));
+        g.fillRect(rack_theme::gutter,40,getWidth()-2*rack_theme::gutter,1);
+        // Rulers mark the four clusters in the action row.
+        for(int x:rulerX)if(x>=0){g.setColour(rack_theme::colour(rack_theme::border));g.fillRect(x,96,1,14);}
+    }
     bool keyPressed(const KeyPress& key) override{if(key==KeyPress::escapeKey){if(hide)hide();return true;}return false;}
-    void resized() override{hideButton.setBounds(getWidth()-112,8,100,26);list.setBounds(12,45,getWidth()-24,28);int x=12;for(auto* b:{&add,&edit,&parameters,&original,&bypass,&remove,&up,&down}){int w=b==&add?155:b==&edit?100:83;b->setBounds(x,85,w,28);x+=w+5;}status.setBounds(12,125,getWidth()-24,50);}
-    void report(String s){status.setText(s,dontSendNotification);std::cerr<<s<<'\n';}
+    // Offscreen capture for design review, mirroring the Qt console's
+    // --screenshot: paints this component and its children into a PNG with no
+    // native peer, so it needs no display and opens no window on the user's
+    // desktop. Layout comes from resized(), which setBounds() triggers.
+    // This vendored JUCE ships image *readers* only, so emit raw ARGB and let
+    // the caller convert it (tests/shot_rack.py wraps this with PIL). Header is
+    // two int32s: width, height.
+    bool captureTo(File file,int w=850,int h=190){
+        Image img(Image::ARGB,w,h,false); Graphics g(img);
+        const Rectangle<int> previous=getBounds();
+        setBounds(0,0,w,h);
+        paintEntireComponent(g,false);
+        setBounds(previous);
+        MemoryOutputStream m;
+        m.writeInt(w); m.writeInt(h);
+        for(int y=0;y<h;++y) for(int x=0;x<w;++x){
+            const Colour c=img.getPixelAt(x,y);
+            m.writeByte((uint8)c.getRed()); m.writeByte((uint8)c.getGreen());
+            m.writeByte((uint8)c.getBlue()); m.writeByte((uint8)c.getAlpha());
+        }
+        FileOutputStream out(file);
+        if(!out.openedOk())return false;
+        out.write(m.getData(),(size_t)m.getDataSize());
+        out.flush();
+        return true;
+    }
+    void resized() override{
+        const int w=getWidth(),edge=rack_theme::gutter,rowY=88,rowH=30,gap=6,rulerGap=10;
+        // Widths follow the text instead of the old 155/100/83 guesses, so the
+        // row ends at the right edge rather than 150px short of it.
+        const int hideWidth=voicemixer::rack_metrics::buttonWidth(hideButton,12);
+        hideButton.setBounds(w-edge-hideWidth,8,hideWidth,24);
+        list.setBounds(edge,48,w-2*edge,32);
+        auto width=[](TextButton& b){return voicemixer::rack_metrics::buttonWidth(b);};
+        const int upW=width(up),downW=width(down);
+        const int manageW=width(add)+gap+width(remove);
+        const int inspectW=width(edit)+gap+width(parameters)+gap+width(original);
+        const int stateW=width(bypass),orderW=upW+gap+downW;
+        // Spread what the text does not need evenly across the three rulers, so
+        // the clusters are separated by the same amount and nothing sits in a
+        // pocket of dead space at either end.
+        const int slack=juce::jmax(0,w-2*edge-manageW-inspectW-stateW-orderW-3*(1+2*rulerGap));
+        const int clusterGap=rulerGap+slack/3;
+        int x=edge,ruler=0;
+        auto place=[&](TextButton& b){const int bw=width(b);b.setBounds(x,rowY,bw,rowH);x+=bw;};
+        place(add);x+=gap;place(remove);x+=clusterGap;
+        rulerX[ruler++]=x;x+=1+clusterGap;
+        place(edit);x+=gap;place(parameters);x+=gap;place(original);x+=clusterGap;
+        rulerX[ruler++]=x;x+=1+clusterGap;
+        place(bypass);x+=clusterGap;
+        rulerX[ruler++]=x;
+        const int orderX=w-edge-orderW;
+        up.setBounds(orderX,rowY,upW,rowH);
+        down.setBounds(orderX+upW+gap,rowY,downW,rowH);
+        status.setBounds(edge,132,w-2*edge,40);
+    }
+    // A caption is a standing hint and a report is an event. One Label serves
+    // both, so the two get different size and colour rather than the same grey.
+    void styleStatus(){status.setFont(rack_theme::font(statusIsMessage?rack_theme::type::label:rack_theme::type::value));status.setColour(Label::textColourId,rack_theme::colour(statusIsMessage?rack_theme::ink:rack_theme::inkMuted));}
+    void report(String s){statusIsMessage=true;styleStatus();status.setText(s,dontSendNotification);std::cerr<<s<<'\n';}
+    // The slot bar shows the selected slot's state: a pip and the text colour
+    // say bypassed, so the combo is not just a bar that happens to hold text.
+    void refreshChrome(){
+        const int i=list.getSelectedId()-1;const bool has=i>=0&&i<int(slots.size());const bool off=has&&slots[i].bypass;
+        list.setColour(ComboBox::buttonColourId,has?rack_theme::colour(off?rack_theme::warn:rack_theme::accent):Colours::transparentBlack);
+        list.setColour(ComboBox::textColourId,rack_theme::colour(off?rack_theme::warn:rack_theme::ink));
+        // The dot follows the slot's signal state; with nothing selected it has
+        // no state to show, so it steps down with the label.
+        bypass.setColour(TextButton::textColourOffId,rack_theme::colour(has?rack_theme::inkSecondary:rack_theme::inkMuted));
+        bypass.setColour(TextButton::textColourOnId,rack_theme::colour(rack_theme::warn));
+        bypass.setToggleState(off,dontSendNotification);
+        list.repaint();
+    }
     void publishVisibility(bool visible){
         auto* info=new DynamicObject;info->setProperty("pid",int64(getpid()));info->setProperty("visible",visible);
         TemporaryFile tmp(folder.getChildFile("visibility.json"));if(tmp.getFile().replaceWithText(JSON::toString(var(info))))tmp.overwriteTargetFileWithTemporary();
@@ -127,7 +232,7 @@ public:
             folder.getChildFile("loading.txt").deleteFile();
         });
     }
-    void refreshList(){int selected=list.getSelectedId();list.clear(dontSendNotification);int id=1;for(const auto& s:slots)list.addItem(String(id)+". "+s.description.name+(s.bypass?" [bypassed]":""),id),++id;list.setSelectedId(jlimit(1,jmax(1,int(slots.size())),selected),dontSendNotification);list.setTextWhenNothingSelected("Empty rack - audio passes through");}
+    void refreshList(){int selected=list.getSelectedId();list.clear(dontSendNotification);int id=1;for(const auto& s:slots)list.addItem(String(id)+". "+s.description.name+(s.bypass?" [bypassed]":""),id),++id;list.setSelectedId(jlimit(1,jmax(1,int(slots.size())),selected),dontSendNotification);list.setTextWhenNothingSelected("Empty rack - audio passes through");refreshChrome();}
     void change(int action){
         if(saving)return;
         const int i=list.getSelectedId()-1;if(i<0||i>=int(slots.size()))return;editors.clear();
@@ -164,6 +269,7 @@ public:
         for(int c=0;c<2;++c)for(uint32_t i=0;i<n;++i)if(!std::isfinite(out[c][i]))out[c][i]=0;
     }
     void startAudio(){
+        if(renderOnly)return;
         pw_init(nullptr,nullptr);loop=pw_thread_loop_new("mixer-plugins",nullptr);
         static const pw_filter_events events=[](){pw_filter_events e{};e.version=PW_VERSION_FILTER_EVENTS;e.process=&Rack::process;e.state_changed=[](void* d,pw_filter_state,pw_filter_state s,const char*){auto& rack=*static_cast<Rack*>(d);rack.streaming=s==PW_FILTER_STATE_STREAMING;if(s==PW_FILTER_STATE_ERROR)rack.failed=true;};return e;}();
         filter=pw_filter_new_simple(pw_thread_loop_get_loop(loop),title.toRawUTF8(),pw_properties_new(PW_KEY_NODE_NAME,nodeName.toRawUTF8(),PW_KEY_NODE_DESCRIPTION,title.toRawUTF8(),PW_KEY_MEDIA_TYPE,"Audio",PW_KEY_MEDIA_CATEGORY,"Filter",PW_KEY_MEDIA_ROLE,"DSP",PW_KEY_MEDIA_CLASS,"Audio/Filter",PW_KEY_NODE_AUTOCONNECT,"false",PW_KEY_NODE_RATE,"1/48000",nullptr),&events,this);
@@ -203,7 +309,7 @@ public:
 };
 class Window final : public DocumentWindow {
     Rack& owner;
-public:Window(Rack& rack):DocumentWindow(rack.title+" - VST FX",Colour(0xff344a57),DocumentWindow::closeButton|DocumentWindow::minimiseButton),owner(rack){setUsingNativeTitleBar(true);setContentNonOwned(&rack,true);centreWithSize(850,190);setResizable(true,false);visibilityChanged();}
+public:Window(Rack& rack):DocumentWindow(rack.title+" - VST FX",rack_theme::colour(rack_theme::bg),DocumentWindow::closeButton|DocumentWindow::minimiseButton),owner(rack){setUsingNativeTitleBar(true);setColour(ResizableWindow::backgroundColourId,rack_theme::colour(rack_theme::bg));setContentNonOwned(&rack,true);centreWithSize(850,190);setResizable(true,false);visibilityChanged();}
 void closeButtonPressed() override{setVisible(false);}
 void visibilityChanged() override{owner.publishVisibility(isVisible());}
 };
@@ -219,12 +325,20 @@ void initialise(const String& args) override{
         std::cout<<JSON::toString(var(result))<<std::endl;quit();return;
     }
     if(a.size()<3){std::cerr<<"Usage: linux-mixer-plugin-host <rack-folder> <node-name> <label> [--background]\n";setApplicationReturnValue(2);quit();return;}
+    renderOnly=a.contains("--render-ui");
     rack=std::make_unique<Rack>(File(a[0].unquoted()),a[1].unquoted(),a[2].unquoted());
     rack->show=[this]{
         if(!window)window=std::make_unique<Window>(*rack);
         window->setVisible(true);window->toFront(true);
     };
     rack->hide=[this]{if(window)window->setVisible(false);};
+    if(a.contains("--render-ui")){
+        // The rack fills its ComboBox from a timer-driven load(), so let it
+        // settle before capturing, then leave without creating a peer.
+        const File out=a[a.indexOf("--render-ui")+1].unquoted();
+        Timer::callAfterDelay(1200,[this,out]{std::cout<<(rack->captureTo(out)?"wrote ":"failed ")<<out.getFullPathName()<<std::endl;quit();});
+        return;
+    }
     // Background audio racks have no top-level native peer. Creating a peer
     // and immediately hiding it can leave a dead startup surface on XWayland.
     if(!a.contains("--background"))rack->show();
