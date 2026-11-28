@@ -15,3 +15,7 @@ dist/
 # Personal local files: a saved profile bundle and the obsolete prototype
 gggg.json
 mixer.py
+
+# runtime state a test creates when run from the source tree
+plugin-racks/
+profile-backups/
