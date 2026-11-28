@@ -14,7 +14,7 @@ find_library(ALSA_LIBRARY NAMES asound)
 if(NOT ALSA_LIBRARY)
   message(FATAL_ERROR "libasound (ALSA) was not found. Install libasound2-dev (Ubuntu/Debian) or alsa-lib (Arch); the MIDI input reader links against it.")
 endif()
-add_executable(linux-mixer tests/verify_profile.cpp tests/verify_control.cpp tests/verify_macros.cpp native/control_commands.cpp native/macros.cpp native/midi.cpp native/macro_ui.cpp native/owned_processes.cpp native/profile_bundle.cpp native/profile_ui.cpp native/main.cpp native/recorder.cpp native/recorder_ui.cpp native/recorder_test.cpp native/paths.cpp native/hardware_links.cpp native/engine.cpp native/console.cpp native/smoke.cpp native/routing.cpp native/routing_settings.cpp native/app_routing_test.cpp native/plugin_racks.cpp native/audio_health.cpp native/health_ui.cpp native/update_checker.cpp native/release_info.cpp)
+add_executable(linux-mixer tests/verify_profile.cpp tests/verify_control.cpp tests/verify_macros.cpp native/control_commands.cpp native/macros.cpp native/midi.cpp native/midi_input.cpp native/midi_ui.cpp native/macro_ui.cpp native/owned_processes.cpp native/profile_bundle.cpp native/profile_ui.cpp native/main.cpp native/recorder.cpp native/recorder_ui.cpp native/recorder_test.cpp native/paths.cpp native/hardware_links.cpp native/engine.cpp native/console.cpp native/smoke.cpp native/routing.cpp native/routing_settings.cpp native/app_routing_test.cpp native/plugin_racks.cpp native/audio_health.cpp native/health_ui.cpp native/update_checker.cpp native/release_info.cpp)
 target_include_directories(linux-mixer PRIVATE native)
 target_compile_definitions(linux-mixer PRIVATE VOICEMIXER_VERSION="${PROJECT_VERSION}")
 target_compile_options(linux-mixer PRIVATE -Wall -Wextra -Wpedantic)
@@ -35,6 +35,9 @@ else()
     target_link_libraries(linux-mixer PRIVATE ${QT_${component}})
   endforeach()
 endif()
+# The console owns the MIDI reader, so the application links libasound like the
+# reader's own test does.
+target_link_libraries(linux-mixer PRIVATE ${ALSA_LIBRARY})
 
 include(CTest)
 if(BUILD_TESTING)
