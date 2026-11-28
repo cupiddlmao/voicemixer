@@ -62,7 +62,15 @@
 //    fader and firing a macro is a normal setup). One result per matching binding
 //    is delivered, in the order the bindings are stored, so a caller's order is
 //    the file's order. One event matching nothing is normal, not an error: no
-//    queue entry and no hook call.
+//    queue entry and no action-hook call.
+//
+// 5. Learn mode needs a second, independent hook: the editor has to see the
+//    message the user physically pressed, which by definition is one no binding
+//    matches yet. The raw hook below therefore fires for every CC and note-on the
+//    reader understands, matched or not, and runs on the reader thread like the
+//    action hook, so the editor must marshal it the same way. It is cleared when
+//    the reader closes and when the editor closes, so it can never outlive the
+//    widget that armed it.
 
 // One action ready to run, with the id of the binding that asked for it. The id is
 // carried so a later UI and a test can say which binding fired without comparing
@@ -100,6 +108,11 @@ public:
     // been queued for takeActions(). It must not block, touch Settings or the
     // engine, or paint; keep it to a marshal.
     using ActionHandler=std::function<void(const QList<MidiAction>&)>;
+    // Called on the reader thread for every received controller or note-on
+    // message, whether or not a binding matched it: learn mode is exactly the
+    // case where nothing matches yet. Same rules as ActionHandler — marshal, do
+    // not block, never touch Settings, the engine or a widget from here.
+    using RawHandler=std::function<void(MidiBinding::Message message,int channel,int number,int value)>;
 private:
     // _snd_seq rather than <alsa/asoundlib.h> here: this header is included by
     // tests and by a later UI, and neither should need the ALSA headers to name
@@ -114,6 +127,7 @@ private:
     QList<MidiAction> pending;
     MidiBindings bindings;
     ActionHandler handler;
+    RawHandler rawHandler;
     QString failure;
     void run()override;
     void receiveEvents();
@@ -136,6 +150,9 @@ public:
     // copy, never Settings.
     void setBindings(const MidiBindings& value);
     void setHandler(ActionHandler value);
+    // Replaces the learn hook. Pass {} to disarm it; the editor clears it when
+    // Learn completes and when it closes. close() clears it as well.
+    void setRawHandler(RawHandler value);
     // Drains what has been delivered since the last call. The queue is bounded by
     // the caller's patience rather than a fixed cap: MIDI is a handful of bytes per
     // event and an event only queues when it matched a binding.

@@ -9,6 +9,7 @@ class QTimer;
 class QDialog;
 class QApplication;
 class UpdateChecker;
+class MidiInput;
 void styleMixerDialog(QDialog&);
 class Console : public QWidget {
 public:
@@ -30,6 +31,10 @@ private:
     friend void runHealthUiTest(QApplication&,Console&);
     Engine& e;
     std::unique_ptr<UpdateChecker> updates;
+    // The one MIDI reader. It lives here, not in the engine, because starting and
+    // stopping it belongs to the controller: hiding to the background keeps it
+    // running, and only the real quit path stops it.
+    std::unique_ptr<MidiInput> midi;
     enum Action { None, Mic, Output, Start, Menu, Comp, Gate, Denoise, Bypass,
                   Color, Gain, MasterGain, MasterMute, VirtualGain, VirtualMute, Route, Apps, Mute, Timing, ResetColor, Eq, TapeLoad, TapeSeek, TapeTransport, TapeRoute, TapeOptions, Plugins, BusMode, FxSend, FxOptions, Balance, BusMono, Health, MacroRun };
     struct Hit {QRectF rect;Action action;QString tip;int first=-1,second=-1;};
@@ -55,4 +60,7 @@ private:
     void timing(int index=0);
     void strip(QPainter&,int index,bool hardware);
     void masters(QPainter&);
+    // Pushes the saved bindings into the reader and starts or stops it to match
+    // midiEnabled. Called at startup, after the editor and after a profile import.
+    void syncMidi();
 };

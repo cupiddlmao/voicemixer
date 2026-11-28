@@ -46,6 +46,10 @@ QJsonObject Settings::json() const {
     QJsonArray racks;for(bool enabled:pluginRacks)racks.append(enabled);o.insert("pluginRacks",racks);o.insert("engineEnabled",engineEnabled);o.insert("tape",tape.json());o.insert("version",3);o.insert("hardware",hardware);o.insert("routing",routing.json());
     // Only written when defined: an absent key means no macros, and profiles from older builds keep their field whitelist.
     if(!macros.macros.isEmpty())o.insert("macros",macros.json());
+    // Same convention for the MIDI bindings and the reader switch: absent means
+    // none (and off), and a file written before this feature loads unchanged.
+    if(!midi.bindings.isEmpty())o.insert("midi",midi.json());
+    if(midiEnabled)o.insert("midiEnabled",true);
     o.insert("sink",sink);
     return o;
 }
@@ -61,6 +65,10 @@ void Settings::load(const QJsonObject& o) {
     }
     sink=routing.outputs[0];
     macros.load(o);
+    // Parsed only: whether a binding names a macro that still exists is the
+    // editor's question at save time, not a load-time refusal.
+    midi.load(o);
+    midiEnabled=o.value("midiEnabled").toBool(midiEnabled);
 }
 bool Engine::writeJson(const QString& path,const QJsonObject& object) {
     QSaveFile f(path);

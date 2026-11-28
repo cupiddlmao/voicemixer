@@ -87,6 +87,11 @@ void MidiInput::setHandler(ActionHandler value) {
     handler=std::move(value);
 }
 
+void MidiInput::setRawHandler(RawHandler value) {
+    QMutexLocker lock(&mutex);
+    rawHandler=std::move(value);
+}
+
 QList<MidiAction> MidiInput::takeActions() {
     QMutexLocker lock(&mutex);
     QList<MidiAction> ready;ready.swap(pending);return ready;
@@ -141,6 +146,9 @@ void MidiInput::close() {
     subscribed.clear();
     QMutexLocker lock(&mutex);
     pending.clear();
+    // A stopped reader has nothing to teach, and a hook left behind would point
+    // at a widget this reader no longer serves.
+    rawHandler={};
 }
 
 void MidiInput::run() {
@@ -239,16 +247,23 @@ void MidiInput::rebuildSubscriptions() {
 void MidiInput::deliver(MidiBinding::Message message,int channel,int number,int value) {
     QList<MidiAction> actions;
     ActionHandler hook;
+    RawHandler raw;
     {
         QMutexLocker lock(&mutex);
+        // The learn hook sees the message itself, including the common case where
+        // no binding matched: that is what the editor is waiting for.
+        raw=rawHandler;
         actions=mapMidiEvent(bindings,message,channel,number,value);
         // No match is the common case — a device transmits every message on its
-        // way past — so it queues nothing and calls nobody.
-        if(actions.isEmpty())return;
-        // The queue is how an application polls, the hook is how it is told now.
-        // Both see the same batch; the hook borrows it and must not keep it.
-        pending.append(actions);
-        hook=handler;
+        // way past — so it queues nothing and calls no action hook.
+        if(!actions.isEmpty()){
+            // The queue is how an application polls, the hook is how it is told
+            // now. Both see the same batch; the hook borrows it and must not keep
+            // it.
+            pending.append(actions);
+            hook=handler;
+        }
     }
+    if(raw)raw(message,channel,number,value);
     if(hook)hook(actions);
 }

@@ -6,6 +6,9 @@
 #include "routing.h"
 #include "plugin_racks.h"
 #include "macro_ui.h"
+#include "midi_ui.h"
+#include "midi_input.h"
+#include <QtCore/QMetaObject>
 #include <QtGui/QPainter>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QWheelEvent>
@@ -98,8 +101,30 @@ Console::Console(Engine& engine):e(engine) {
     updates=std::make_unique<UpdateChecker>(this);updates->changed=[this]{update();};
     auto* frameTimer=new QTimer(this);frameTimer->setSingleShot(true);frameTimer->setInterval(16);connect(frameTimer,&QTimer::timeout,this,[this]{update();});
     e.changed=[frameTimer]{if(!frameTimer->isActive())frameTimer->start();};transportTimer=new QTimer(this);transportTimer->setInterval(180);connect(transportTimer,&QTimer::timeout,this,[this]{e.recorder->seek(e.recorder->position+transportDirection*2);});
+    midi=std::make_unique<MidiInput>();
+    // Reader thread: queue and get out. The batch is applied on this object's
+    // thread, where Settings and the engine may be touched, and lands in the graph
+    // with the one apply() a macro run also uses.
+    midi->setHandler([this](const QList<MidiAction>& actions){
+        QMetaObject::invokeMethod(this,[this,actions]{applyMidiBatch(e,actions);},Qt::QueuedConnection);
+    });
+    syncMidi();
 }
-Console::~Console(){e.changed={};}
+Console::~Console(){
+    // Drop the hooks before the widgets they marshal into; the reader may still be
+    // holding a copy of either.
+    midi->setHandler({});midi->setRawHandler({});midi->close();
+    e.changed={};
+}
+void Console::syncMidi(){
+    // The reader maps from its own locked copy, never from Settings.
+    midi->setBindings(e.settings.midi);
+    // Never open the sequencer for a user who has not asked for MIDI.
+    if(e.settings.midiEnabled&&midi->clientId()<0){
+        QString error;
+        if(!midi->open(error))e.message="MIDI input not started: "+error;
+    } else if(!e.settings.midiEnabled&&midi->clientId()>=0)midi->close();
+}
 void Console::closeEvent(QCloseEvent* event){if(closeToBackground){event->ignore();closeToBackground();}else QWidget::closeEvent(event);}
 void Console::saveScreenshot(const QString& path){grab().save(path);}
 QPointF Console::logical(const QPointF& p)const{return {p.x()*W/width(),p.y()*H/height()};}
@@ -316,13 +341,14 @@ void Console::options(){
     m.addAction("Gate attack / release…",this,[this]{timing();});
     m.addAction("Reset color panel",this,[this]{e.settings.colorX=e.settings.colorY=.5;e.apply();});
     m.addAction("Macro editor…",this,[this]{showMacroEditor(e,this);});
+    m.addAction("MIDI bindings…",this,[this]{showMidiEditor(e,this,midi.get());syncMidi();});
     m.addSeparator();
     m.addAction("Back up complete profile…",this,[this]{e.exportPreset(QFileDialog::getSaveFileName(this,"Back up complete mixer profile",{},"Mixer profile / legacy preset (*.json)"));});
-    m.addAction("Restore profile / preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Restore mixer profile / preset",{},"Mixer profile / legacy preset (*.json)");if(!f.isEmpty())e.importPreset(f);});
+    m.addAction("Restore profile / preset…",this,[this]{const auto f=QFileDialog::getOpenFileName(this,"Restore mixer profile / preset",{},"Mixer profile / legacy preset (*.json)");if(!f.isEmpty()){e.importPreset(f);syncMidi();}});
     m.addSeparator();m.addAction("Audio health…",this,[this]{audioHealth();});m.addAction("Check for updates…",this,[this]{updates->showDialog(this);});
     m.addSeparator();m.addAction("Restart audio engine",this,[this]{e.start();});m.addAction("Stop audio engine",this,[this]{e.stop();});
     m.addSeparator();m.addAction("Hide mixer (keep routing in background)",this,[this]{window()->close();});
-    m.addAction("Quit mixer and stop audio",this,[this]{e.stop();closeToBackground={};QApplication::quit();});
+    m.addAction("Quit mixer and stop audio",this,[this]{e.stop();midi->close();closeToBackground={};QApplication::quit();});
     m.exec(QCursor::pos());
 }
 void Console::activate(Action a,const QPointF& pos,int first,int second) {
