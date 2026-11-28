@@ -97,6 +97,16 @@ if(BUILD_TESTING)
     target_compile_options(verify-midi-input PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
     add_test(NAME midi-input COMMAND verify-midi-input)
     set_tests_properties(midi-input PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    # The editor case drives the dialog offscreen and the batch the console applies.
+    # It links the console for the shared dialog styling, and libasound for the
+    # reader the enable switch starts; like midi-input it skips the reader
+    # assertions when the machine has no sequencer.
+    add_executable(verify-midi-editor tests/verify_midi_editor.cpp native/midi_ui.cpp native/midi_input.cpp native/midi.cpp native/macros.cpp native/macro_ui.cpp native/control_commands.cpp native/console.cpp native/recorder_ui.cpp native/health_ui.cpp native/profile_ui.cpp native/profile_bundle.cpp native/engine.cpp native/paths.cpp native/routing.cpp native/routing_settings.cpp native/plugin_racks.cpp native/audio_health.cpp native/recorder.cpp native/owned_processes.cpp native/hardware_links.cpp native/update_checker.cpp native/release_info.cpp)
+    target_include_directories(verify-midi-editor PRIVATE native)
+    target_link_libraries(verify-midi-editor PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network ${ALSA_LIBRARY})
+    target_compile_options(verify-midi-editor PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
+    add_test(NAME midi-editor COMMAND verify-midi-editor)
+    set_tests_properties(midi-editor PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     add_executable(verify-stability tests/verify_stability.cpp native/audio_health.cpp native/update_checker.cpp native/release_info.cpp native/paths.cpp)
     target_include_directories(verify-stability PRIVATE native)
     target_link_libraries(verify-stability PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
