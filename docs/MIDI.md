@@ -1,9 +1,8 @@
 # MIDI control
 
-> **Added on the development branch, planned for Voicemixer 0.7.0.** This document
-> describes MIDI control as it stands on `main`: the binding model, the ALSA
-> sequencer reader, the message mapping, the bindings editor with learn mode and the
-> console wiring, tested as described below. The version number is not bumped yet.
+> **Added in Voicemixer 0.7.0.** This document describes MIDI control as released:
+> the binding model, the ALSA sequencer reader, the message mapping, the bindings
+> editor with learn mode and the console wiring, tested as described below.
 
 This document follows the plan in [the 0.6.0 feature plan](PLAN-0.6.0.md), section 3,
 and describes what the code on `main` actually does. Where something is unverified it

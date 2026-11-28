@@ -70,11 +70,16 @@ configuration of open-source processors, not VoiceMeeter's algorithms.
   atomic update — e.g. pull mic back 3 dB, mute music, enable denoise — triggered
   from a terminal, a desktop keybinding or a row of run buttons in the console.
   See [macro instructions](docs/MACROS.md).
+- **MIDI control**: bind a controller's knobs and keys to the same faders and
+  switches through the ALSA sequencer — a CC moves a strip fader across its
+  −60..+12 dB range, a note or button runs a saved macro. Bindings are learned
+  by pressing the physical control, edited in a dialog under Menu → MIDI
+  bindings…, and off until enabled there. See [MIDI instructions](docs/MIDI.md).
 
 The virtual EQs, recorder, reverb/delay and master balance/mono controls are
 functional in this release. The recorder follows the documented tape workflow;
 see [recorder controls and behavior](docs/RECORDER.md). Reverb/delay use our own
-native DSP, rather than VB-Audio's proprietary FX algorithms. VBAN, MIDI,
+native DSP, rather than VB-Audio's proprietary FX algorithms. VBAN,
 external FX inserts, surround upmix and full parametric master EQ are still
 outside this build. ASIO is a Windows driver model and does not exist on Linux;
 Windows DAWs running under Wine can reach the mixer through wineasio, which is
@@ -200,23 +205,23 @@ sudo cmake --install build
 
 This is where to get a copy for another computer; you do **not** need to run the
 release script to install Voicemixer. Download the matching files from the
-[the v0.6.0 release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.6.0):
+[the v0.7.0 release](https://github.com/cupiddlmao/voicemixer/releases/tag/v0.7.0):
 
-- **Ubuntu 26.04 amd64:** download `linux-mixer-0.6.0-ubuntu26.04-x86_64.deb`
-  and install with `sudo apt install ./linux-mixer-0.6.0-ubuntu26.04-x86_64.deb`.
+- **Ubuntu 26.04 amd64:** download `linux-mixer-0.7.0-ubuntu26.04-x86_64.deb`
+  and install with `sudo apt install ./linux-mixer-0.7.0-ubuntu26.04-x86_64.deb`.
   The Ubuntu ZIP includes that same `.deb`, the source and installation notes.
   This binary was built on Ubuntu 26.04; it is **not** a universal Ubuntu package.
-- **Arch/CachyOS:** download `linux-mixer-0.6.0-arch-friend.zip`, extract it and
+- **Arch/CachyOS:** download `linux-mixer-0.7.0-arch-friend.zip`, extract it and
   run `makepkg -si` in the extracted folder as your normal user. This builds an
   Arch-native package from the included, checksummed source. The native build,
   mixer and audio/plugin checks are tested on CachyOS; the `makepkg`
   recipe and the test suite have been validated in a clean Arch container; a
   container has no audio session, so runtime behaviour is validated on CachyOS.
-- **Gentoo/KDE:** download `linux-mixer-0.6.0-gentoo-friend.zip`, extract it and
+- **Gentoo/KDE:** download `linux-mixer-0.7.0-gentoo-friend.zip`, extract it and
   follow `INSTALL.txt`. This is a per-user source build, not a prebuilt package
   or Portage ebuild; its build, tests and install were validated in a clean
   Gentoo stage3 container, without an audio session.
-- **Other Linux versions:** use `linux-mixer-0.6.0-source.tar.gz` and the build
+- **Other Linux versions:** use `linux-mixer-0.7.0-source.tar.gz` and the build
   instructions above. Other Ubuntu releases have not been validated.
 
 Download `SHA256SUMS` to verify the files. The downloads do not contain the
