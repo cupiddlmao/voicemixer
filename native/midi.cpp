@@ -46,8 +46,11 @@ static bool wholeNumber(const QJsonValue& value,double& result) {
 }
 
 QJsonObject MidiBinding::json() const {
+    // An unset action writes as empty text rather than as the default command, so a
+    // hand-built binding can never be saved as "mute mic1 toggle" by accident;
+    // load() then refuses it instead of inventing an action.
     return {{"id",id},{"message",midiMessageText(message)},{"channel",channel},
-        {"number",number},{"action",midiActionText(action)}};
+        {"number",number},{"action",hasAction?midiActionText(action):QString()}};
 }
 
 bool MidiBinding::load(const QJsonObject& object,QString& error) {
@@ -119,4 +122,86 @@ void MidiBindings::load(const QJsonObject& settings) {
         }
         bindings.append(binding);
     }
+}
+
+// Mirrors the targets parseTarget accepts. A ControlCommand can also be built by
+// hand — from an editor, or by a later learn mode that fills in a number before it
+// knows which target the user picked — so existence is checked here rather than
+// assumed from parsing.
+static bool targetExists(const ControlCommand& c) {
+    switch(c.kind){
+    case ControlCommand::Mic: return c.index>=0&&c.index<5;
+    case ControlCommand::Input: return c.index>=0&&c.index<3;
+    case ControlCommand::Bus: return c.index>=0&&c.index<8;
+    }
+    return false;
+}
+
+static bool macroExists(const Settings& settings,const QString& name) {
+    for(const auto& macro:settings.macros.macros)
+        if(QString::compare(macro.name,name,Qt::CaseInsensitive)==0)return true;
+    return false;
+}
+
+// The verb word alone, for messages; midiActionText() already carries the whole
+// canonical action text and this is only its first word.
+static QString verbWord(const ControlCommand& action) {
+    const QString text=midiActionText(action);
+    const int space=text.indexOf(' ');
+    return space<0?text:text.left(space);
+}
+
+bool validateMidiBinding(const MidiBinding& binding,const QList<MidiBinding>& existing,
+                         const Settings& settings,QString& error) {
+    const QString id=binding.id.trimmed();
+    if(id.isEmpty()){error="MIDI binding has no id";return false;}
+    for(const auto& other:existing)
+        if(QString::compare(other.id,id,Qt::CaseInsensitive)==0){error="duplicate MIDI binding id '"+id+"'";return false;}
+    if(binding.channel<-1||binding.channel>15){
+        error=QString("MIDI binding '%1': channel %2 is outside -1..15").arg(id).arg(binding.channel);return false;
+    }
+    if(binding.number<0||binding.number>127){
+        error=QString("MIDI binding '%1': controller/note number %2 is outside 0..127").arg(id).arg(binding.number);return false;
+    }
+    if(!binding.hasAction){error="MIDI binding '"+id+"' has no action";return false;}
+    const ControlCommand& action=binding.action;
+    // A macro action names a saved macro. The name is resolved here and not at
+    // load: bindings and macros share one settings file, and only the whole
+    // Settings can say whether a name exists.
+    if(action.verb==ControlCommand::Macro){
+        const QString name=action.name.trimmed();
+        if(name.isEmpty()){error="MIDI binding '"+id+"': a macro action needs a macro name";return false;}
+        if(!macroExists(settings,name)){error="MIDI binding '"+id+"': unknown macro '"+name+"'";return false;}
+        return true;
+    }
+    if(!targetExists(action)){error=QString("MIDI binding '%1': target does not exist").arg(id);return false;}
+    if((action.verb==ControlCommand::Bypass||action.verb==ControlCommand::Denoise)&&action.kind!=ControlCommand::Mic){
+        error=QString("MIDI binding '%1': %2 applies only to mic1-5").arg(id).arg(verbWord(action));return false;
+    }
+    // A verb nobody classified as a parameter command is refused rather than
+    // assumed safe; Macro was handled above, so this catches a hand-built verb
+    // outside the four a binding may run.
+    if(commandScope(action.verb)!=CommandScope::Parameter){
+        error=QString("MIDI binding '%1': '%2' is not a control command a binding may run").arg(id).arg(verbWord(action));return false;
+    }
+    // Round-trip through the shared parser so a binding is guaranteed to parse as
+    // well as to apply; this also rejects a non-finite gain.
+    const QString text=midiActionText(action);
+    if(text.isEmpty()){error=QString("MIDI binding '%1': unknown verb or target").arg(id);return false;}
+    ControlCommand reparsed;QString parseError;
+    if(!parseMidiAction(text,reparsed,parseError)){error=QString("MIDI binding '%1': %2").arg(id).arg(parseError);return false;}
+    return true;
+}
+
+bool validateMidiBindings(const QList<MidiBinding>& bindings,const Settings& settings,QString& error) {
+    // Each binding is checked against the ones already accepted, which is where a
+    // duplicate id is caught. A duplicate matches the first occurrence, so the
+    // refusal names the id rather than a position that a later edit would move.
+    QList<MidiBinding> accepted;
+    for(const auto& binding:bindings){
+        if(!validateMidiBinding(binding,accepted,settings,error))return false;
+        accepted.append(binding);
+    }
+    error.clear();
+    return true;
 }

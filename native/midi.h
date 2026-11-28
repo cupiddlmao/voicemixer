@@ -88,3 +88,23 @@ bool parseMidiMessage(const QString& text, MidiBinding::Message& message, QStrin
 // than restated here.
 QString midiActionText(const ControlCommand& action);
 bool parseMidiAction(const QString& text, ControlCommand& action, QString& error);
+
+// Validates one binding without applying it: a non-empty id, a channel in -1..15,
+// a controller or note number in 0..127, an id no entry in `existing` already
+// uses, and an action that exists. "Exists" means: a macro action names a macro
+// saved in `settings.macros`, and a command action uses a target that exists and
+// a verb a binding may run. Pure over Settings, so it needs no window and no
+// engine; the macro lookup is the only reason it reads Settings rather than a
+// list.
+//
+// The split from load() is deliberate. load() decides whether an entry is
+// well formed text; this decides whether the thing that text names exists. A
+// binding naming a macro that has since been deleted therefore still parses, and
+// is refused here with the macro's name in the message, rather than disappearing
+// silently at load.
+bool validateMidiBinding(const MidiBinding& binding, const QList<MidiBinding>& existing,
+                         const Settings& settings, QString& error);
+// Validates a whole list in order with the same per-binding rules, reporting the
+// first refusal and clearing `error` when every binding is sound. An editor saves
+// through this, and a load path reports through it once the file has been parsed.
+bool validateMidiBindings(const QList<MidiBinding>& bindings, const Settings& settings, QString& error);
