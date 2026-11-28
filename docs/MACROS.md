@@ -1,10 +1,8 @@
 # Macro control
 
-> **Planned for the next release, 0.6.0.** Macros are not part of any published
-> release yet. What this file describes exists only on the development `main`
-> branch: the model, validation, execution, the editor dialog, the run buttons in
-> the console and the `--ctl macro` trigger are implemented there and tested as
-> described below.
+> **Added in Voicemixer 0.6.0.** This document describes the macro feature as
+> released: the model, validation, execution, the editor dialog, the run buttons
+> in the console and the `--ctl macro` trigger, tested as described below.
 
 This document follows the plan in [the 0.6.0 feature plan](PLAN-0.6.0.md), sections 4
 and Phase 6, and describes what the code on `main` actually does. Where something is

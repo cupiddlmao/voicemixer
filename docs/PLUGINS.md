@@ -52,7 +52,20 @@ in this first implementation.
    bus in stereo. A voice/chat application may downmix its microphone input to mono.
 
 Compatibility depends on the plugin, its installer/DRM and the Wine/yabridge pair.
-The native VST3 host is covered by an automated stereo audio test. Wider 2.0.0
+The native VST3 host is covered by an automated stereo audio test.
+
+## ASIO for Windows DAWs under Wine
+
+ASIO is a Windows driver model and does not exist on Linux; Voicemeeter-style ASIO
+support is therefore not a feature this project can implement. The equivalent
+Linux arrangement is [wineasio](https://github.com/wineasio/wineasio): a separate
+Wine driver that exposes an ASIO device to Windows applications and connects them
+to JACK/PipeWire. It is not bundled with Voicemeeter, is installed and configured
+by you, and its latency behaviour is not something this project controls. The
+mixer deliberately does not change the PipeWire session quantum, so wineasio
+projects the buffer size the audio session already uses.
+
+Wider 2.0.0
 Windows VST3 was also tested locally through Wine Staging 11.20 and official
 yabridge development build 5.1.1-57-gb580a9f7. Stable yabridge 5.1.1 is not the
 version used for that verification. When a user-installed bridge exists under

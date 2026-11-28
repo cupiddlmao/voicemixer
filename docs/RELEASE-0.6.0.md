@@ -2,8 +2,8 @@ Voicemixer 0.6.0 adds macro control: a named, ordered list of control steps that
 run against the existing `--ctl` vocabulary, triggered from the command line, a
 row of run buttons in the console, or the new macro editor.
 
-> DRAFT — not yet released. The version is not bumped and no archives are built
-> until the validation record below is complete and reviewed.
+> The validation record below was completed and reviewed before the version bump,
+> packaging and tag.
 
 ## Changes
 - **Macros.** A macro is a named list of steps, each step the same `{verb, target,
