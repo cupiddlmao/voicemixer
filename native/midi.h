@@ -5,11 +5,6 @@
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
-// A binding holds its action by value, so ControlCommand must be complete here.
-// This header therefore pulls in control_commands.h and, through it, engine.h and
-// Settings; it is not the lightweight forward-declaring header macros.h is.
-#include "control_commands.h"
-
 // MIDI control bindings: one message, one action, stored under the "midi" key of
 // settings.json beside "macros" and "appRules".
 //
@@ -30,6 +25,11 @@
 //   functions over data, and the caller marshals an event onto the GUI thread
 //   before it touches Settings or the engine. A model that quietly assumed the
 //   GUI thread would compile cleanly and then race the first real fader move.
+
+// A binding holds its action by value, so ControlCommand must be complete here.
+// This header therefore pulls in control_commands.h and, through it, engine.h and
+// Settings; it is not the lightweight forward-declaring header macros.h is.
+#include "control_commands.h"
 
 // One CC or note-on message mapped to one action. The action is either a single
 // ControlCommand — the mute/gain/bypass/denoise verbs and their targets, the same
