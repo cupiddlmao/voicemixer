@@ -49,6 +49,27 @@ bool settingsValid(const QJsonObject& settings,QString& error){
                     const auto steps=macro.value("steps").toArray();if(steps.isEmpty()||steps.size()>256)return false;
                     for(const auto& step:steps)if(!step.isString()||step.toString().isEmpty()||step.toString().size()>256||step.toString().contains(QChar::Null))return false;
                 }
+            }else if(key=="midi"&&value.isArray()){
+                // Bindings are a list of {"id","message","channel","number",
+                // "action"} objects, checked for shape here for the same reason
+                // macros are: an imported profile must not smuggle a non-list
+                // into MidiBindings::load, which tolerates malformed entries.
+                const auto list=value.toArray();if(list.size()>256)return false;
+                for(const auto& entry:list){
+                    if(!entry.isObject())return false;
+                    const auto binding=entry.toObject();if(binding.size()!=5)return false;
+                    const auto id=binding.value("id");
+                    if(!id.isString()||id.toString().trimmed().isEmpty()||id.toString().size()>256||id.toString().contains(QChar::Null))return false;
+                    const auto message=binding.value("message");
+                    if(!message.isString()||(message.toString()!="cc"&&message.toString()!="noteon"))return false;
+                    const auto channel=binding.value("channel"),number=binding.value("number");
+                    if(!channel.isDouble()||channel.toDouble()!=channel.toInt()||channel.toInt()<-1||channel.toInt()>15)return false;
+                    if(!number.isDouble()||number.toDouble()!=number.toInt()||number.toInt()<0||number.toInt()>127)return false;
+                    if(!binding.value("action").isString())return false;
+                }
+            }else if(key=="midiEnabled"&&value.isBool()){
+                // Checked like the other booleans, written out here so the
+                // unknown-field rejection above does not refuse it.
             }else if(value.isArray()){
                 const auto a=value.toArray();int expected=8;
                 if(key=="hardwarePan"||key=="hardwareDepth"||key=="outputs")expected=5;
