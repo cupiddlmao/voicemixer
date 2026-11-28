@@ -6,6 +6,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options("-ffile-prefix-map=${CMAKE_CURRENT_SOURCE_DIR}=.")
 endif()
 find_package(Qt6 QUIET COMPONENTS Core Gui Widgets Network)
+# The MIDI input reader speaks to the ALSA sequencer through libasound. It is a
+# runtime-free dependency of that reader only (nothing is wired into the app yet),
+# but a configure without it is refused here rather than failing at link time with
+# an unresolved snd_seq_* symbol.
+find_library(ALSA_LIBRARY NAMES asound)
+if(NOT ALSA_LIBRARY)
+  message(FATAL_ERROR "libasound (ALSA) was not found. Install libasound2-dev (Ubuntu/Debian) or alsa-lib (Arch); the MIDI input reader links against it.")
+endif()
 add_executable(linux-mixer tests/verify_profile.cpp tests/verify_control.cpp tests/verify_macros.cpp native/control_commands.cpp native/macros.cpp native/midi.cpp native/macro_ui.cpp native/owned_processes.cpp native/profile_bundle.cpp native/profile_ui.cpp native/main.cpp native/recorder.cpp native/recorder_ui.cpp native/recorder_test.cpp native/paths.cpp native/hardware_links.cpp native/engine.cpp native/console.cpp native/smoke.cpp native/routing.cpp native/routing_settings.cpp native/app_routing_test.cpp native/plugin_racks.cpp native/audio_health.cpp native/health_ui.cpp native/update_checker.cpp native/release_info.cpp)
 target_include_directories(linux-mixer PRIVATE native)
 target_compile_definitions(linux-mixer PRIVATE VOICEMIXER_VERSION="${PROJECT_VERSION}")
@@ -76,6 +84,16 @@ if(BUILD_TESTING)
     target_compile_options(verify-midi PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
     add_test(NAME midi-bindings COMMAND verify-midi)
     set_tests_properties(midi-bindings PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
+    # The input case links the binding sources for the same reason the midi-bindings
+    # case does, plus the reader and libasound. It needs no MIDI device: the mapping
+    # half runs standalone, and the sequencer half skips itself when /dev/snd/seq is
+    # unavailable.
+    add_executable(verify-midi-input tests/verify_midi_input.cpp native/midi_input.cpp native/midi.cpp native/macros.cpp native/control_commands.cpp native/engine.cpp native/paths.cpp native/routing.cpp native/routing_settings.cpp native/plugin_racks.cpp native/audio_health.cpp native/recorder.cpp native/owned_processes.cpp native/hardware_links.cpp)
+    target_include_directories(verify-midi-input PRIVATE native)
+    target_link_libraries(verify-midi-input PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets ${ALSA_LIBRARY})
+    target_compile_options(verify-midi-input PRIVATE -UNDEBUG -Wall -Wextra -Wpedantic)
+    add_test(NAME midi-input COMMAND verify-midi-input)
+    set_tests_properties(midi-input PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     add_executable(verify-stability tests/verify_stability.cpp native/audio_health.cpp native/update_checker.cpp native/release_info.cpp native/paths.cpp)
     target_include_directories(verify-stability PRIVATE native)
     target_link_libraries(verify-stability PRIVATE Qt6::Core Qt6::Widgets Qt6::Network)
