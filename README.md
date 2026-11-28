@@ -19,15 +19,17 @@ vendored components retain their own licenses and notices (see [vendor](vendor/R
 
 ## Screenshots
 
-Actual application windows captured with an isolated profile, before selecting audio
-devices. The first input shows the two-axis Position pad; the recorder example
-uses a generic recording folder.
+Actual application windows captured with an isolated profile in its first-run
+state: hardware input 1 carries the microphone the engine suggests on a fresh
+profile and everything else is unconfigured, so this is what you see before
+choosing devices. The status bar's MACRO section is the 0.6.0 run row with two
+example macros; the recorder example uses a generic recording folder.
 
 ![Voicemixer main mixing console](docs/screenshots/console.png)
 
-| Tape recorder options | Reverb and per-bus returns |
-| --- | --- |
-| ![Tape recorder options](docs/screenshots/recorder-options.png) | ![Reverb options](docs/screenshots/reverb-options.png) |
+| Macro editor | Tape recorder options | Reverb and per-bus returns |
+| --- | --- | --- |
+| ![Macro editor](docs/screenshots/macro-editor.png) | ![Tape recorder options](docs/screenshots/recorder-options.png) | ![Reverb options](docs/screenshots/reverb-options.png) |
 
 A native C++/Qt personal audio console using the supplied VoiceMeeter Potato
 screenshot as its layout reference. Opens maximized as a normal desktop window.
