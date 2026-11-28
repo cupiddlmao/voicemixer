@@ -10,6 +10,7 @@
 #include "routing_settings.h"
 #include "recorder.h"
 #include "macros.h"
+#include "midi.h"
 class RoutingMatrix;
 class PluginRacks;
 class AudioHealth;
@@ -39,6 +40,12 @@ struct Settings : HardwareSettings {
     RoutingSettings routing;
     RecorderSettings tape;
     MacroSettings macros;
+    // MIDI bindings live beside the macros because their actions name macros and
+    // both are edited from the same settings file. midiEnabled is the reader's on
+    // switch, persisted so a controller setup survives a restart; it defaults off
+    // so a machine with no sequencer is never opened by surprise.
+    MidiBindings midi;
+    bool midiEnabled=false;
     QJsonObject json() const;
     void load(const QJsonObject&);
 };

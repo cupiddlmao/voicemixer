@@ -26,6 +26,30 @@
 //   before it touches Settings or the engine. A model that quietly assumed the
 //   GUI thread would compile cleanly and then race the first real fader move.
 
+// Settings holds this collection by value, so MidiBindings must be complete even
+// when engine.h is reached from inside control_commands.h (which this header
+// pulls in, and which pulls in engine.h in turn). It is therefore declared first,
+// over a forward-declared MidiBinding, the same way macros.h can name its step
+// list before ControlCommand is defined. The member is a QList, which needs no
+// complete element type until its methods are instantiated; json() and load()
+// below are out of line in midi.cpp for the same reason.
+struct MidiBinding;
+
+// Bindings stored under the "midi" key of settings.json. An absent key means no
+// bindings, which is what every settings file written before this feature says. A
+// malformed binding is dropped on its own and described in `errors`; the rest of
+// the file still loads. Duplicate ids are the one exception: ids are how a binding
+// is addressed, so a file that repeats one is not trusted and loads empty rather
+// than picking whichever entry came first.
+struct MidiBindings {
+    QList<MidiBinding> bindings;
+    QStringList errors;
+    QJsonArray json() const;
+    // Reads the settings root, not the "midi" value, so a caller can hand it the
+    // same QJsonObject Engine reads settings.json into.
+    void load(const QJsonObject& settings);
+};
+
 // A binding holds its action by value, so ControlCommand must be complete here.
 // This header therefore pulls in control_commands.h and, through it, engine.h and
 // Settings; it is not the lightweight forward-declaring header macros.h is.
@@ -61,21 +85,6 @@ struct MidiBinding {
     // mistake that would otherwise become a binding on channel 0, controller 0
     // that silently does nothing.
     bool load(const QJsonObject& object, QString& error);
-};
-
-// Bindings stored under the "midi" key of settings.json. An absent key means no
-// bindings, which is what every settings file written before this feature says. A
-// malformed binding is dropped on its own and described in `errors`; the rest of
-// the file still loads. Duplicate ids are the one exception: ids are how a binding
-// is addressed, so a file that repeats one is not trusted and loads empty rather
-// than picking whichever entry came first.
-struct MidiBindings {
-    QList<MidiBinding> bindings;
-    QStringList errors;
-    QJsonArray json() const;
-    // Reads the settings root, not the "midi" value, so a caller can hand it the
-    // same QJsonObject Engine reads settings.json into.
-    void load(const QJsonObject& settings);
 };
 
 // "cc" and "noteon" as stored, and back. Unknown text is an error, never a guess.
